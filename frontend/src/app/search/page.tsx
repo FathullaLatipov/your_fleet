@@ -266,13 +266,13 @@ function SearchPageInner() {
                       <img
                         src={mediaUrl(b.photo_path)}
                         alt=""
-                        className="h-[88px] w-[104px] shrink-0 rounded-md object-cover"
+                        className="h-[104px] w-[132px] shrink-0 self-center rounded-md object-cover"
                       />
                     ) : (
                       <ShopCover
                         name={b.name}
                         category={b.category}
-                        className="h-[88px] w-[104px] shrink-0 rounded-md"
+                        className="h-[104px] w-[132px] shrink-0 self-center rounded-md"
                       />
                     )}
                     <div className="min-w-0 flex-1">

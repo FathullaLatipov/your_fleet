@@ -50,7 +50,8 @@ h1, h2, h3, .display {
   color: #fff;
 }
 
-/* Controls */
+/* Controls — inside the components layer so utility classes can override them */
+@layer components {
 .field {
   @apply w-full rounded-md border border-line bg-panel px-3 py-2 text-[15px] text-ink placeholder:text-faint focus:outline-2 focus:outline-pine focus:outline-offset-0;
 }
@@ -81,6 +82,7 @@ h1, h2, h3, .display {
 }
 .shop-card[data-active="true"] {
   @apply border-pine shadow-[0_2px_10px_rgb(23_82_53/0.12)];
+}
 }
 
 /* Map */
