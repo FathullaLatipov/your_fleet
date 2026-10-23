@@ -1,0 +1,180 @@
+import uuid
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
+from sqlalchemy.orm import Session, joinedload
+
+from app.db import get_db
+from app.models import (
+    AuditLog,
+    Business,
+    BusinessService,
+    Offer,
+    OfferStatus,
+    PartnerStatus,
+    Review,
+    ReviewStatus,
+    Service,
+    User,
+)
+from app.schemas import (
+    BusinessDetailOut,
+    BusinessListItem,
+    BusinessServiceIn,
+    BusinessUpdateIn,
+    OfferPublicOut,
+    ReviewOut,
+    ServiceOut,
+)
+from app.security import get_current_user
+from app.services.geo import SearchFilters, locate_area, search_businesses
+
+router = APIRouter(prefix="/api", tags=["businesses"])
+
+
+@router.get("/services", response_model=list[ServiceOut])
+def list_services(db: Session = Depends(get_db)):
+    return db.execute(select(Service).order_by(Service.name)).scalars().all()
+
+
+@router.get("/search")
+def search(
+    db: Session = Depends(get_db),
+    lat: float | None = Query(default=None, ge=-90, le=90),
+    lng: float | None = Query(default=None, ge=-180, le=180),
+    location: str | None = Query(default=None, max_length=128,
+                                 description="ZIP or 'City, ST' when no coordinates"),
+    radius_miles: float = Query(default=50, ge=1, le=300),
+    q: str | None = Query(default=None, max_length=128),
+    category: str | None = None,
+    state: str | None = Query(default=None, max_length=2),
+    partner_only: bool = False,
+    verified_only: bool = False,
+    has_offer: bool = False,
+    min_rating: float | None = Query(default=None, ge=1, le=5),
+    open_now: bool = False,
+    sort: str = Query(default="distance", pattern="^(distance|rating)$"),
+    limit: int = Query(default=25, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    resolved_from_location = None
+    if (lat is None or lng is None) and location:
+        point = locate_area(db, location)
+        if point:
+            lat, lng = point
+            resolved_from_location = {"lat": lat, "lng": lng}
+    filters = SearchFilters(
+        lat=lat, lng=lng, radius_miles=radius_miles, q=q, category=category,
+        state=state, partner_only=partner_only, verified_only=verified_only,
+        has_offer=has_offer, min_rating=min_rating, open_now=open_now,
+        sort=sort, limit=limit, offset=offset,
+    )
+    rows, total = search_businesses(db, filters)
+    return {
+        "total": total,
+        "items": [BusinessListItem(**r) for r in rows],
+        "resolved_location": resolved_from_location,
+    }
+
+
+def _active_offers(db: Session, business: Business) -> list[Offer]:
+    if business.partner_status != PartnerStatus.ACTIVE:
+        return []
+    now = datetime.now(timezone.utc)
+    return db.execute(
+        select(Offer).where(
+            Offer.business_id == business.id,
+            Offer.status == OfferStatus.APPROVED,
+            (Offer.starts_at.is_(None)) | (Offer.starts_at <= now),
+            (Offer.expires_at.is_(None)) | (Offer.expires_at > now),
+        )
+    ).scalars().all()
+
+
+@router.get("/businesses/{business_id}", response_model=BusinessDetailOut)
+def business_detail(business_id: uuid.UUID, db: Session = Depends(get_db)):
+    business = db.execute(
+        select(Business)
+        .options(joinedload(Business.services).joinedload(BusinessService.service))
+        .where(Business.id == business_id, Business.is_published.is_(True))
+    ).unique().scalar_one_or_none()
+    if business is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Business not found")
+    out = BusinessDetailOut.model_validate(business)
+    out.is_claimed = business.owner_user_id is not None
+    out.is_verified = business.identity_verified_at is not None
+    out.offers = [OfferPublicOut.model_validate(o) for o in _active_offers(db, business)]
+    return out
+
+
+@router.get("/businesses/{business_id}/reviews", response_model=list[ReviewOut])
+def business_reviews(
+    business_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+):
+    return db.execute(
+        select(Review)
+        .where(Review.business_id == business_id, Review.status == ReviewStatus.PUBLISHED)
+        .order_by(Review.created_at.desc())
+        .limit(limit).offset(offset)
+    ).scalars().all()
+
+
+def _owned_business(business_id: uuid.UUID, user: User, db: Session) -> Business:
+    business = db.get(Business, business_id)
+    if business is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Business not found")
+    if business.owner_user_id != user.id:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not manage this business")
+    return business
+
+
+@router.patch("/businesses/{business_id}", response_model=BusinessDetailOut)
+def update_business(
+    business_id: uuid.UUID,
+    body: BusinessUpdateIn,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    business = _owned_business(business_id, user, db)
+    changed = body.model_dump(exclude_unset=True)
+    for field, value in changed.items():
+        setattr(business, field, value)
+    db.add(AuditLog(actor_id=user.id, action="business.update", entity_type="business",
+                    entity_id=str(business.id), data={"fields": sorted(changed)}))
+    db.commit()
+    return business_detail(business_id, db)
+
+
+@router.put("/businesses/{business_id}/services", response_model=BusinessDetailOut)
+def set_business_services(
+    business_id: uuid.UUID,
+    body: list[BusinessServiceIn],
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    business = _owned_business(business_id, user, db)
+    if len(body) > 50:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Too many services")
+    valid_ids = set(db.execute(select(Service.id)).scalars())
+    for item in body:
+        if item.service_id not in valid_ids:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                f"Unknown service: {item.service_id}")
+    existing = db.execute(
+        select(BusinessService).where(BusinessService.business_id == business.id)
+    ).scalars().all()
+    for bs in existing:
+        db.delete(bs)
+    for item in body:
+        db.add(BusinessService(
+            business_id=business.id, service_id=item.service_id,
+            standard_price_cents=item.standard_price_cents, price_note=item.price_note,
+        ))
+    db.add(AuditLog(actor_id=user.id, action="business.services.set", entity_type="business",
+                    entity_id=str(business.id), data={"count": len(body)}))
+    db.commit()
+    return business_detail(business_id, db)
