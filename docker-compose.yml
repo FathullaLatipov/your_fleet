@@ -1,0 +1,44 @@
+# Production deployment for the YourFleet backend (API + its own PostgreSQL).
+# Requires a .env file next to this file with:
+#   YF_DB_PASSWORD=...   YF_JWT_SECRET=...   GOOGLE_PLACES_API_KEY=... (optional)
+name: yourfleet
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: yourfleet
+      POSTGRES_USER: yourfleet
+      POSTGRES_PASSWORD: ${YF_DB_PASSWORD:?set YF_DB_PASSWORD in .env}
+    volumes:
+      - yourfleet_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U yourfleet -d yourfleet"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://yourfleet:${YF_DB_PASSWORD}@db:5432/yourfleet
+      JWT_SECRET: ${YF_JWT_SECRET:?set YF_JWT_SECRET in .env}
+      CORS_ORIGINS: ${YF_CORS_ORIGINS:-https://your-fleet.vercel.app}
+      GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+      ENVIRONMENT: production
+      MEDIA_DIR: /app/media
+    ports:
+      - "8010:8000"
+    volumes:
+      - yourfleet_media:/app/media
+
+volumes:
+  yourfleet_pgdata:
+  yourfleet_media:

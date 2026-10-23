@@ -93,8 +93,12 @@ export interface BusinessDetail {
   photos: BusinessPhoto[];
 }
 
-export const mediaUrl = (path: string): string =>
-  `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}${path}`;
+export const mediaUrl = (path: string): string => {
+  const base =
+    process.env.NEXT_PUBLIC_API_URL ??
+    (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+  return `${base}${path}`;
+};
 
 export type BookingStatus =
   | "requested" | "quoted" | "accepted" | "confirmed"

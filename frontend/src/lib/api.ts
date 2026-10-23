@@ -1,4 +1,8 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+// In production the default is same-origin: /api/* is proxied to the backend
+// by next.config.ts rewrites. Set NEXT_PUBLIC_API_URL to call the API directly.
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
 
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
