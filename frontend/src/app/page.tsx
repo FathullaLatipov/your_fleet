@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { HomeSearch } from "@/components/HomeSearch";
 import { HomeStats } from "@/components/HomeStats";
+import { TopRated } from "@/components/TopRated";
 
 const CATEGORIES = [
   { slug: "truck_trailer", name: "Truck & trailer repair", blurb: "Engine, drivetrain, suspension, frame" },
@@ -93,6 +94,8 @@ export default function HomePage() {
           shops have agreements with YourFleet, and only admin-verified offers show prices.
         </p>
       </section>
+
+      <TopRated />
 
       {/* Categories */}
       <section className="mx-auto max-w-6xl px-4 pb-14">

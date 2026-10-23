@@ -32,6 +32,7 @@ class SearchFilters:
     mobile_only: bool = False
     emergency_only: bool = False
     min_rating: float | None = None
+    min_reviews: int = 0
     open_now: bool = False
     sort: str = "distance"
     limit: int = 25
@@ -124,6 +125,11 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
     if f.min_rating is not None:
         params["min_rating"] = f.min_rating
         conditions.append("b.rating_avg >= :min_rating")
+    if f.min_reviews > 0:
+        params["min_reviews"] = f.min_reviews
+        conditions.append(
+            "coalesce(b.rating_count, 0) + coalesce(b.google_rating_count, 0) >= :min_reviews"
+        )
     if f.has_offer:
         conditions.append(
             "b.partner_status = 'active' AND EXISTS ("

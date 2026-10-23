@@ -100,6 +100,7 @@ def search(
     mobile_only: bool = False,
     emergency_only: bool = False,
     min_rating: float | None = Query(default=None, ge=1, le=5),
+    min_reviews: int = Query(default=0, ge=0, le=100000),
     open_now: bool = False,
     sort: str = Query(default="distance", pattern="^(distance|rating|price)$"),
     limit: int = Query(default=25, ge=1, le=100),
@@ -115,7 +116,7 @@ def search(
         lat=lat, lng=lng, radius_miles=radius_miles, q=q, category=category,
         state=state, partner_only=partner_only, verified_only=verified_only,
         has_offer=has_offer, mobile_only=mobile_only, emergency_only=emergency_only,
-        min_rating=min_rating, open_now=open_now,
+        min_rating=min_rating, min_reviews=min_reviews, open_now=open_now,
         sort=sort, limit=limit, offset=offset,
     )
     rows, total = search_businesses(db, filters)

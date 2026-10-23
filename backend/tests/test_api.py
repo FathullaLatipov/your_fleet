@@ -123,6 +123,12 @@ class TestSearch:
         r = client.get("/api/search", params={"q": "Hidden"})
         assert r.json()["total"] == 0
 
+    def test_min_reviews_combines_yourfleet_and_google(self, client, db):
+        make_business(db, "Few Reviews", google_rating=5.0, google_rating_count=3)
+        make_business(db, "Many Reviews", google_rating=4.8, google_rating_count=900)
+        r = client.get("/api/search", params={"min_reviews": 25, "sort": "rating"})
+        assert [i["name"] for i in r.json()["items"]] == ["Many Reviews"]
+
     def test_partner_filter(self, client, db):
         make_business(db, "Partner Shop", partner_status=PartnerStatus.ACTIVE)
         make_business(db, "Plain Shop")
