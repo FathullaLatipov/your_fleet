@@ -1,5 +1,8 @@
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api import admin, auth, bookings, businesses, claims, me, offers, reviews
 from app.config import get_settings
@@ -22,6 +25,10 @@ app.add_middleware(
 for router in (auth.router, businesses.router, claims.router, offers.router,
                bookings.router, reviews.router, me.router, admin.router):
     app.include_router(router)
+
+_media = Path(settings.media_dir)
+_media.mkdir(parents=True, exist_ok=True)
+app.mount("/media", StaticFiles(directory=_media), name="media")
 
 
 @app.get("/api/health")

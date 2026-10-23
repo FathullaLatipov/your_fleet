@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     jwt_expires_minutes: int = 1440
     cors_origins: str = "http://localhost:3000"
     environment: str = "development"
+    media_dir: str = "media"
 
     @property
     def cors_origin_list(self) -> list[str]:

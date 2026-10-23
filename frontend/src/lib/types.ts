@@ -26,7 +26,17 @@ export interface BusinessListItem {
   is_mobile_service: boolean | null;
   accepts_emergency: boolean | null;
   price_from_cents: number | null;
+  photo_path: string | null;
+  hours: Record<string, [string, string][]> | null;
+  google_rating: number | null;
+  google_rating_count: number | null;
   distance_miles: number | null;
+}
+
+export interface BusinessPhoto {
+  id: string;
+  path: string;
+  caption: string | null;
 }
 
 export interface Offer {
@@ -73,11 +83,18 @@ export interface BusinessDetail {
   partner_status: "none" | "active" | "suspended";
   rating_avg: number | null;
   rating_count: number;
+  google_rating: number | null;
+  google_rating_count: number | null;
+  google_place_url: string | null;
   is_claimed: boolean;
   is_verified: boolean;
   services: BusinessService[];
   offers: Offer[];
+  photos: BusinessPhoto[];
 }
+
+export const mediaUrl = (path: string): string =>
+  `${process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000"}${path}`;
 
 export type BookingStatus =
   | "requested" | "quoted" | "accepted" | "confirmed"

@@ -6,8 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
 import { Stars, TrustBadges } from "@/components/badges";
+import { ShopCover } from "@/components/ShopCover";
 import { api } from "@/lib/api";
-import { CATEGORY_LABELS, fmtUsd, type SearchResponse } from "@/lib/types";
+import { openStatus } from "@/lib/hours";
+import { CATEGORY_LABELS, fmtUsd, mediaUrl, type SearchResponse } from "@/lib/types";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -222,46 +224,69 @@ function SearchPageInner() {
               <p className="px-1 text-sm text-steel">
                 {data!.total.toLocaleString()} shop{data!.total === 1 ? "" : "s"} found
               </p>
-              {items.map((b) => (
-                <Link
-                  key={b.id}
-                  href={`/business/${b.id}`}
-                  className="shop-card"
-                  data-active={b.id === activeId}
-                  onMouseEnter={() => setActiveId(b.id)}
-                >
-                  <div className="flex items-baseline justify-between gap-3">
-                    <h3 className="display font-semibold leading-snug">{b.name}</h3>
-                    {b.distance_miles != null && (
-                      <span className="shrink-0 rounded bg-mist px-1.5 py-0.5 text-sm font-semibold text-steel">
-                        {b.distance_miles} mi
-                      </span>
+              {items.map((b) => {
+                const status = openStatus(b.hours);
+                return (
+                  <Link
+                    key={b.id}
+                    href={`/business/${b.id}`}
+                    className="shop-card flex gap-3 !p-3"
+                    data-active={b.id === activeId}
+                    onMouseEnter={() => setActiveId(b.id)}
+                  >
+                    {b.photo_path ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        src={mediaUrl(b.photo_path)}
+                        alt=""
+                        className="h-[88px] w-[104px] shrink-0 rounded-md object-cover"
+                      />
+                    ) : (
+                      <ShopCover
+                        name={b.name}
+                        category={b.category}
+                        className="h-[88px] w-[104px] shrink-0 rounded-md"
+                      />
                     )}
-                  </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-steel">
-                    <Stars avg={b.rating_avg} count={b.rating_count} />
-                    <span>{CATEGORY_LABELS[b.category] ?? b.category}</span>
-                    {b.city && <span>{b.city}, {b.state}</span>}
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                    <TrustBadges b={b} compact />
-                    {b.is_mobile_service && (
-                      <span className="rounded bg-pine-wash px-1.5 py-0.5 text-xs font-medium text-pine">Mobile service</span>
-                    )}
-                    {b.accepts_emergency && (
-                      <span className="rounded bg-danger-wash px-1.5 py-0.5 text-xs font-medium text-danger">Emergency</span>
-                    )}
-                    {b.price_from_cents != null && (
-                      <span className="ml-auto text-sm font-semibold text-ink">
-                        from {fmtUsd(b.price_from_cents)}
-                      </span>
-                    )}
-                  </div>
-                  {b.phone && (
-                    <p className="mt-1.5 text-sm font-medium text-pine">{b.phone}</p>
-                  )}
-                </Link>
-              ))}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline justify-between gap-3">
+                        <h3 className="display truncate font-semibold leading-snug">{b.name}</h3>
+                        {b.distance_miles != null && (
+                          <span className="shrink-0 rounded bg-mist px-1.5 py-0.5 text-sm font-semibold text-steel">
+                            {b.distance_miles} mi
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-steel">
+                        <Stars avg={b.rating_avg} count={b.rating_count} />
+                        <span>{CATEGORY_LABELS[b.category] ?? b.category}</span>
+                        {b.city && <span>{b.city}, {b.state}</span>}
+                      </div>
+                      <p
+                        className={`mt-0.5 text-sm font-medium ${
+                          status.kind === "open" ? "text-pine" : status.kind === "closed" ? "text-danger" : "text-faint"
+                        }`}
+                      >
+                        {status.label}
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        <TrustBadges b={b} compact />
+                        {b.is_mobile_service && (
+                          <span className="rounded bg-pine-wash px-1.5 py-0.5 text-xs font-medium text-pine">Mobile</span>
+                        )}
+                        {b.accepts_emergency && (
+                          <span className="rounded bg-danger-wash px-1.5 py-0.5 text-xs font-medium text-danger">Emergency</span>
+                        )}
+                        {b.price_from_cents != null && (
+                          <span className="ml-auto text-sm font-semibold text-ink">
+                            from {fmtUsd(b.price_from_cents)}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
               {totalPages > 1 && (
                 <div className="flex items-center justify-between px-1 py-2">
                   <button className="btn-quiet" disabled={page <= 1}

@@ -49,10 +49,14 @@ SELECT b.id, b.name, b.category, b.city, b.state, b.phone, b.lat, b.lng,
            AND (o.starts_at IS NULL OR o.starts_at <= :now)
            AND (o.expires_at IS NULL OR o.expires_at > :now)
        ) AND b.partner_status = 'active' AS has_active_offer,
-       b.is_mobile_service, b.accepts_emergency,
+       b.is_mobile_service, b.accepts_emergency, b.hours,
+       b.google_rating, b.google_rating_count,
        (SELECT min(bs.standard_price_cents) FROM business_services bs
         WHERE bs.business_id = b.id AND bs.standard_price_cents IS NOT NULL
-       ) AS price_from_cents
+       ) AS price_from_cents,
+       (SELECT '/media/' || p.filename FROM business_photos p
+        WHERE p.business_id = b.id ORDER BY p.sort, p.created_at LIMIT 1
+       ) AS photo_path
        {distance_col}
 FROM businesses b
 WHERE b.is_published = true

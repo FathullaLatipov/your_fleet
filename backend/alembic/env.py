@@ -13,6 +13,16 @@ if config.config_file_name is not None:
 config.set_main_option("sqlalchemy.url", get_settings().database_url)
 target_metadata = Base.metadata
 
+# Functional indexes managed by hand-written migrations; autogenerate must
+# not try to drop them because they are absent from the ORM metadata.
+MANUAL_INDEXES = {"ix_businesses_earth"}
+
+
+def include_object(obj, name, type_, reflected, compare_to):
+    if type_ == "index" and name in MANUAL_INDEXES:
+        return False
+    return True
+
 
 def run_migrations_offline() -> None:
     context.configure(
@@ -32,7 +42,11 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            include_object=include_object,
+        )
         with context.begin_transaction():
             context.run_migrations()
 

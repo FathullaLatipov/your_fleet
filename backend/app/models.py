@@ -125,6 +125,13 @@ class Business(Base):
     rating_avg: Mapped[float | None] = mapped_column(Float)
     rating_count: Mapped[int] = mapped_column(Integer, default=0)
 
+    # Third-party (Google) rating data. Populated only from licensed sources
+    # (Places API with attribution, or a dataset that includes them) — never
+    # scraped or invented. Null means "not available", and the UI says so.
+    google_rating: Mapped[float | None] = mapped_column(Float)
+    google_rating_count: Mapped[int | None] = mapped_column(Integer)
+    google_place_url: Mapped[str | None] = mapped_column(String(512))
+
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -164,6 +171,21 @@ class BusinessService(Base):
     service: Mapped[Service] = relationship()
 
     __table_args__ = (UniqueConstraint("business_id", "service_id", name="uq_business_service"),)
+
+
+class BusinessPhoto(Base):
+    """Photos uploaded by the verified owner (or admins). Stored on disk under
+    MEDIA_DIR with generated names; originals' filenames are never trusted."""
+
+    __tablename__ = "business_photos"
+
+    id: Mapped[uuid.UUID] = pk()
+    business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(128), unique=True)
+    caption: Mapped[str | None] = mapped_column(String(255))
+    sort: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class ClaimStatus(str, enum.Enum):

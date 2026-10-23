@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { BusinessDetail } from "@/lib/types";
+import { mediaUrl, type BusinessDetail, type BusinessPhoto } from "@/lib/types";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"] as const;
 const DAY_LABELS: Record<string, string> = {
@@ -28,8 +30,10 @@ export default function EditBusinessPage() {
   const [emergency, setEmergency] = useState<string>("unknown");
   const [hours, setHours] = useState<Record<string, string>>({});
   const [rows, setRows] = useState<Row[]>([]);
+  const [photos, setPhotos] = useState<BusinessPhoto[]>([]);
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     api<ServiceOption[]>("/api/services").then(setCatalog).catch(() => {});
@@ -45,6 +49,7 @@ export default function EditBusinessPage() {
         h[d] = data.hours?.[d]?.map((r) => r.join("-")).join(", ") ?? "";
       }
       setHours(h);
+      setPhotos(data.photos);
       setRows(data.services.map((s) => ({
         service_id: s.service.id,
         price: s.standard_price_cents != null ? String(s.standard_price_cents / 100) : "",
@@ -109,10 +114,87 @@ export default function EditBusinessPage() {
     }
   }
 
+  async function uploadPhoto(file: File) {
+    setUploading(true);
+    setMsg(null);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      let authHeader: Record<string, string> = {};
+      try {
+        const t = localStorage.getItem("yf_token");
+        if (t) authHeader = { Authorization: `Bearer ${t}` };
+      } catch { /* ignore */ }
+      const res = await fetch(`${API_URL}/api/businesses/${id}/photos`, {
+        method: "POST",
+        headers: authHeader,
+        body: form,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(typeof data?.detail === "string" ? data.detail : "Upload failed");
+      setPhotos((ps) => [...ps, data as BusinessPhoto]);
+    } catch (err) {
+      setMsg({ kind: "err", text: err instanceof Error ? err.message : "Upload failed" });
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deletePhoto(photoId: string) {
+    try {
+      await api(`/api/businesses/${id}/photos/${photoId}`, { method: "DELETE" });
+      setPhotos((ps) => ps.filter((p) => p.id !== photoId));
+    } catch (err) {
+      setMsg({ kind: "err", text: err instanceof Error ? err.message : "Delete failed" });
+    }
+  }
+
   return (
     <div className="mx-auto max-w-2xl px-4 py-8">
       <h1 className="text-2xl font-bold">Edit listing</h1>
       <p className="mt-1 text-steel">{b.name} — {b.address_raw}</p>
+
+      <section className="mt-6">
+        <h2 className="text-sm font-medium text-steel">
+          Photos ({photos.length}/8) — JPEG, PNG or WebP, up to 5 MB
+        </h2>
+        <p className="mt-0.5 text-xs text-faint">
+          Shops with real photos of the building, bays and crew get far more requests.
+        </p>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {photos.map((p) => (
+            <div key={p.id} className="relative">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={mediaUrl(p.path)} alt={p.caption ?? "Shop photo"}
+                   className="h-24 w-32 rounded-md border border-line object-cover" />
+              <button
+                type="button"
+                aria-label="Delete photo"
+                className="absolute right-1 top-1 rounded bg-charcoal/80 px-1.5 py-0.5 text-xs font-bold text-white hover:bg-danger"
+                onClick={() => deletePhoto(p.id)}
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+          {photos.length < 8 && (
+            <label className={`grid h-24 w-32 cursor-pointer place-items-center rounded-md border border-dashed border-line text-sm font-medium text-steel hover:border-pine hover:text-pine ${uploading ? "opacity-50" : ""}`}>
+              {uploading ? "Uploading…" : "+ Add photo"}
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                disabled={uploading}
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void uploadPhoto(f);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          )}
+        </div>
+      </section>
 
       <form onSubmit={save} className="mt-6 space-y-5">
         <div className="grid gap-4 sm:grid-cols-2">

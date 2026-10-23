@@ -1,14 +1,18 @@
+import secrets
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
+from app.config import get_settings
 from app.db import get_db
 from app.models import (
     AuditLog,
     Business,
+    BusinessPhoto,
     BusinessService,
     Offer,
     OfferStatus,
@@ -17,10 +21,12 @@ from app.models import (
     ReviewStatus,
     Service,
     User,
+    UserRole,
 )
 from app.schemas import (
     BusinessDetailOut,
     BusinessListItem,
+    BusinessPhotoOut,
     BusinessServiceIn,
     BusinessUpdateIn,
     OfferPublicOut,
@@ -147,6 +153,14 @@ def business_detail(business_id: uuid.UUID, db: Session = Depends(get_db)):
     out.is_claimed = business.owner_user_id is not None
     out.is_verified = business.identity_verified_at is not None
     out.offers = [OfferPublicOut.model_validate(o) for o in _active_offers(db, business)]
+    photos = db.execute(
+        select(BusinessPhoto).where(BusinessPhoto.business_id == business.id)
+        .order_by(BusinessPhoto.sort, BusinessPhoto.created_at)
+    ).scalars().all()
+    out.photos = [
+        BusinessPhotoOut(id=p.id, path=f"/media/{p.filename}", caption=p.caption)
+        for p in photos
+    ]
     return out
 
 
@@ -189,6 +203,90 @@ def update_business(
                     entity_id=str(business.id), data={"fields": sorted(changed)}))
     db.commit()
     return business_detail(business_id, db)
+
+
+# ------------------------------------------------------------------ photos
+
+MAX_PHOTO_BYTES = 5 * 1024 * 1024
+MAX_PHOTOS = 8
+
+
+def _sniff_image(head: bytes) -> str | None:
+    """Return a safe extension from file magic bytes, or None if not an
+    accepted image type. The client's filename/content-type are never trusted."""
+    if head.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def media_dir() -> Path:
+    d = Path(get_settings().media_dir)
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+@router.post("/businesses/{business_id}/photos", response_model=BusinessPhotoOut,
+             status_code=201)
+async def upload_photo(
+    business_id: uuid.UUID,
+    file: UploadFile,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    business = db.get(Business, business_id)
+    if business is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Business not found")
+    if business.owner_user_id != user.id and user.role != UserRole.ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not manage this business")
+    count = len(db.execute(
+        select(BusinessPhoto.id).where(BusinessPhoto.business_id == business_id)
+    ).scalars().all())
+    if count >= MAX_PHOTOS:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            f"Maximum {MAX_PHOTOS} photos per business")
+    data = await file.read(MAX_PHOTO_BYTES + 1)
+    if len(data) > MAX_PHOTO_BYTES:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Photo exceeds 5 MB")
+    ext = _sniff_image(data[:16])
+    if ext is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Only JPEG, PNG or WebP images are accepted")
+    filename = f"{secrets.token_hex(16)}.{ext}"
+    (media_dir() / filename).write_bytes(data)
+    photo = BusinessPhoto(business_id=business_id, filename=filename,
+                          uploaded_by=user.id, sort=count)
+    db.add(photo)
+    db.add(AuditLog(actor_id=user.id, action="business.photo.upload",
+                    entity_type="business", entity_id=str(business_id)))
+    db.commit()
+    return BusinessPhotoOut(id=photo.id, path=f"/media/{photo.filename}", caption=photo.caption)
+
+
+@router.delete("/businesses/{business_id}/photos/{photo_id}", status_code=204)
+def delete_photo(
+    business_id: uuid.UUID,
+    photo_id: uuid.UUID,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    business = db.get(Business, business_id)
+    photo = db.get(BusinessPhoto, photo_id)
+    if business is None or photo is None or photo.business_id != business_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo not found")
+    if business.owner_user_id != user.id and user.role != UserRole.ADMIN:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "You do not manage this business")
+    try:
+        (media_dir() / photo.filename).unlink(missing_ok=True)
+    except OSError:
+        pass  # DB row is removed regardless; orphan files are harmless
+    db.delete(photo)
+    db.add(AuditLog(actor_id=user.id, action="business.photo.delete",
+                    entity_type="business", entity_id=str(business_id)))
+    db.commit()
 
 
 @router.put("/businesses/{business_id}/services", response_model=BusinessDetailOut)

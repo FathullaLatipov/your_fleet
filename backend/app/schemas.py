@@ -105,6 +105,12 @@ class OfferPublicOut(ORMModel):
         return None
 
 
+class BusinessPhotoOut(ORMModel):
+    id: uuid.UUID
+    path: str = ""
+    caption: str | None = None
+
+
 class BusinessListItem(ORMModel):
     id: uuid.UUID
     name: str
@@ -123,6 +129,10 @@ class BusinessListItem(ORMModel):
     is_mobile_service: bool | None = None
     accepts_emergency: bool | None = None
     price_from_cents: int | None = None
+    photo_path: str | None = None
+    hours: dict | None = None
+    google_rating: float | None = None
+    google_rating_count: int | None = None
     distance_miles: float | None = None
 
 
@@ -145,10 +155,14 @@ class BusinessDetailOut(ORMModel):
     partner_status: PartnerStatus
     rating_avg: float | None
     rating_count: int
+    google_rating: float | None = None
+    google_rating_count: int | None = None
+    google_place_url: str | None = None
     is_claimed: bool = False
     is_verified: bool = False
     services: list[BusinessServiceOut] = []
     offers: list[OfferPublicOut] = []
+    photos: list[BusinessPhotoOut] = []
 
 
 class BusinessUpdateIn(BaseModel):
