@@ -120,6 +120,9 @@ class BusinessListItem(ORMModel):
     is_claimed: bool = False
     is_verified: bool = False
     has_active_offer: bool = False
+    is_mobile_service: bool | None = None
+    accepts_emergency: bool | None = None
+    price_from_cents: int | None = None
     distance_miles: float | None = None
 
 

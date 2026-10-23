@@ -29,6 +29,8 @@ class SearchFilters:
     partner_only: bool = False
     verified_only: bool = False
     has_offer: bool = False
+    mobile_only: bool = False
+    emergency_only: bool = False
     min_rating: float | None = None
     open_now: bool = False
     sort: str = "distance"
@@ -46,7 +48,11 @@ SELECT b.id, b.name, b.category, b.city, b.state, b.phone, b.lat, b.lng,
          WHERE o.business_id = b.id AND o.status = 'approved'
            AND (o.starts_at IS NULL OR o.starts_at <= :now)
            AND (o.expires_at IS NULL OR o.expires_at > :now)
-       ) AND b.partner_status = 'active' AS has_active_offer
+       ) AND b.partner_status = 'active' AS has_active_offer,
+       b.is_mobile_service, b.accepts_emergency,
+       (SELECT min(bs.standard_price_cents) FROM business_services bs
+        WHERE bs.business_id = b.id AND bs.standard_price_cents IS NOT NULL
+       ) AS price_from_cents
        {distance_col}
 FROM businesses b
 WHERE b.is_published = true
@@ -79,7 +85,7 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
         conditions.append(
             "earth_distance(ll_to_earth(:lat, :lng), ll_to_earth(b.lat, b.lng)) <= :radius_m"
         )
-        if f.sort != "rating":
+        if f.sort == "distance":
             order = "ORDER BY distance_m ASC"
 
     if f.q:
@@ -97,8 +103,14 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
     if f.zip_code:
         params["zip"] = f.zip_code.strip()
         conditions.append("b.zip_code = :zip")
+    if f.sort == "price":
+        order = "ORDER BY price_from_cents ASC NULLS LAST, b.name"
     if f.partner_only:
         conditions.append("b.partner_status = 'active'")
+    if f.mobile_only:
+        conditions.append("b.is_mobile_service IS TRUE")
+    if f.emergency_only:
+        conditions.append("b.accepts_emergency IS TRUE")
     if f.verified_only:
         conditions.append("b.identity_verified_at IS NOT NULL")
     if f.min_rating is not None:

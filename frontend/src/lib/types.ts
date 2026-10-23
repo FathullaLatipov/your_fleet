@@ -23,6 +23,9 @@ export interface BusinessListItem {
   is_claimed: boolean;
   is_verified: boolean;
   has_active_offer: boolean;
+  is_mobile_service: boolean | null;
+  accepts_emergency: boolean | null;
+  price_from_cents: number | null;
   distance_miles: number | null;
 }
 

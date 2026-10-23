@@ -38,6 +38,45 @@ def list_services(db: Session = Depends(get_db)):
     return db.execute(select(Service).order_by(Service.name)).scalars().all()
 
 
+@router.get("/stats/public")
+def public_stats(db: Session = Depends(get_db)):
+    """Honest marketplace numbers for the homepage. Savings are computed only
+    from completed bookings against offers with a documented regular price;
+    with no such bookings the figure is 0 and the UI hides it."""
+    from sqlalchemy import func, text
+
+    from app.models import Booking, BookingStatus
+
+    businesses = db.execute(
+        select(func.count(Business.id)).where(Business.is_published)
+    ).scalar_one()
+    partners = db.execute(
+        select(func.count(Business.id)).where(
+            Business.is_published, Business.partner_status == PartnerStatus.ACTIVE)
+    ).scalar_one()
+    states = db.execute(
+        select(func.count(func.distinct(Business.state))).where(
+            Business.is_published, Business.state.isnot(None))
+    ).scalar_one()
+    completed = db.execute(
+        select(func.count(Booking.id)).where(Booking.status == BookingStatus.COMPLETED)
+    ).scalar_one()
+    savings = db.execute(text(
+        "SELECT coalesce(sum(o.standard_price_cents - bk.final_price_cents), 0) "
+        "FROM bookings bk JOIN offers o ON bk.offer_id = o.id "
+        "WHERE bk.status = 'completed' AND bk.final_price_cents IS NOT NULL "
+        "AND o.standard_price_cents IS NOT NULL "
+        "AND o.standard_price_cents > bk.final_price_cents"
+    )).scalar_one()
+    return {
+        "businesses": businesses,
+        "partners": partners,
+        "states": states,
+        "completed_bookings": completed,
+        "driver_savings_cents": int(savings),
+    }
+
+
 @router.get("/search")
 def search(
     db: Session = Depends(get_db),
@@ -52,9 +91,11 @@ def search(
     partner_only: bool = False,
     verified_only: bool = False,
     has_offer: bool = False,
+    mobile_only: bool = False,
+    emergency_only: bool = False,
     min_rating: float | None = Query(default=None, ge=1, le=5),
     open_now: bool = False,
-    sort: str = Query(default="distance", pattern="^(distance|rating)$"),
+    sort: str = Query(default="distance", pattern="^(distance|rating|price)$"),
     limit: int = Query(default=25, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
 ):
@@ -67,7 +108,8 @@ def search(
     filters = SearchFilters(
         lat=lat, lng=lng, radius_miles=radius_miles, q=q, category=category,
         state=state, partner_only=partner_only, verified_only=verified_only,
-        has_offer=has_offer, min_rating=min_rating, open_now=open_now,
+        has_offer=has_offer, mobile_only=mobile_only, emergency_only=emergency_only,
+        min_rating=min_rating, open_now=open_now,
         sort=sort, limit=limit, offset=offset,
     )
     rows, total = search_businesses(db, filters)

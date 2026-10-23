@@ -48,16 +48,16 @@ export function HomeSearch() {
   return (
     <form
       onSubmit={searchByText}
-      className="flex flex-col gap-3 self-start rounded border border-line bg-mist p-5"
+      className="flex flex-col gap-3 rounded-lg border border-white/10 bg-panel p-5 shadow-[0_12px_40px_rgb(0_0_0/0.35)]"
       aria-label="Search for truck repair"
     >
-      <h2 className="text-lg font-bold">Where&apos;s the truck?</h2>
+      <h2 className="display text-lg font-bold">Where&apos;s the truck?</h2>
       <label className="text-sm font-medium text-steel" htmlFor="home-loc">
         City, state, or ZIP
       </label>
       <input
         id="home-loc"
-        className="field"
+        className="field !py-2.5"
         placeholder="e.g. Dallas, TX or 75201"
         value={location}
         onChange={(e) => setLocation(e.target.value)}
@@ -65,7 +65,7 @@ export function HomeSearch() {
       <label className="text-sm font-medium text-steel" htmlFor="home-cat">
         What do you need?
       </label>
-      <select id="home-cat" className="field" value={category} onChange={(e) => setCategory(e.target.value)}>
+      <select id="home-cat" className="field !py-2.5" value={category} onChange={(e) => setCategory(e.target.value)}>
         <option value="">Any service</option>
         <option value="truck_trailer">Truck & trailer repair</option>
         <option value="tire">Tires</option>
@@ -74,10 +74,10 @@ export function HomeSearch() {
         <option value="pickup_auto">Pickup & auto</option>
       </select>
       <div className="mt-1 flex flex-wrap gap-2">
-        <button type="submit" className="btn flex-1">
-          Search
+        <button type="submit" className="btn flex-1 !py-2.5">
+          Search shops
         </button>
-        <button type="button" onClick={useMyLocation} disabled={locating} className="btn-quiet flex-1">
+        <button type="button" onClick={useMyLocation} disabled={locating} className="btn-forest flex-1 !py-2.5">
           {locating ? "Locating…" : "Use my location"}
         </button>
       </div>

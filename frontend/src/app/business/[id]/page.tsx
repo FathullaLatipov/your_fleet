@@ -92,46 +92,67 @@ export default function BusinessPage() {
                 before you commit.
               </p>
               <ul className="mt-4 space-y-3">
-                {b.offers.map((o) => (
-                  <li key={o.id} className="rounded border border-amber/40 bg-panel p-4">
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <h3 className="font-semibold">{o.title}</h3>
-                      <div className="text-right">
-                        {o.marketplace_price_cents != null && (
-                          <span className="text-lg font-bold text-pine">{fmtUsd(o.marketplace_price_cents)}</span>
-                        )}
-                        {o.standard_price_cents != null && o.marketplace_price_cents != null && (
-                          <span className="ml-2 text-sm text-faint line-through">{fmtUsd(o.standard_price_cents)}</span>
-                        )}
-                        {o.discount_percent != null && o.marketplace_price_cents == null && (
-                          <span className="text-lg font-bold text-pine">{o.discount_percent}% off</span>
-                        )}
-                        {o.offer_type === "quote_based" && (
-                          <span className="text-sm font-semibold text-steel">Discounted quote</span>
+                {b.offers.map((o) => {
+                  const pct =
+                    o.savings_cents != null && o.standard_price_cents
+                      ? Math.round((o.savings_cents / o.standard_price_cents) * 100)
+                      : null;
+                  return (
+                    <li key={o.id} className="rounded-lg border border-amber/40 bg-panel p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <h3 className="display font-semibold">{o.title}</h3>
+                        {pct != null && (
+                          <span className="rounded bg-cta px-2 py-0.5 text-sm font-bold text-ink">
+                            Save {pct}%
+                          </span>
                         )}
                       </div>
-                    </div>
-                    {o.savings_cents != null && (
-                      <p className="text-sm font-medium text-amber-ink">
-                        You save {fmtUsd(o.savings_cents)} vs. the shop&apos;s documented regular price
-                      </p>
-                    )}
-                    {o.conditions && <p className="mt-1 text-sm text-steel">{o.conditions}</p>}
-                    {o.expires_at && (
-                      <p className="mt-1 text-xs text-faint">
-                        Valid through {new Date(o.expires_at).toLocaleDateString()}
-                      </p>
-                    )}
-                    {canBook && (
-                      <button
-                        className="btn mt-3 !py-1.5"
-                        onClick={() => { setBookingOffer(o.id); setBookingOpen(true); }}
-                      >
-                        Book with this offer
-                      </button>
-                    )}
-                  </li>
-                ))}
+                      {o.standard_price_cents != null && o.marketplace_price_cents != null ? (
+                        <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line">
+                          <div className="bg-mist p-3">
+                            <p className="text-xs text-steel">Regular price (documented)</p>
+                            <p className="mt-0.5 text-xl font-semibold text-faint line-through">
+                              {fmtUsd(o.standard_price_cents)}
+                            </p>
+                          </div>
+                          <div className="bg-pine-wash p-3">
+                            <p className="text-xs font-medium text-pine">Marketplace price</p>
+                            <p className="display mt-0.5 text-xl font-bold text-pine">
+                              {fmtUsd(o.marketplace_price_cents)}
+                            </p>
+                          </div>
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-lg font-bold text-pine">
+                          {o.marketplace_price_cents != null && fmtUsd(o.marketplace_price_cents)}
+                          {o.discount_percent != null && o.marketplace_price_cents == null && `${o.discount_percent}% off`}
+                          {o.offer_type === "quote_based" && o.discount_percent == null && (
+                            <span className="text-base font-semibold text-steel">Discounted quote on request</span>
+                          )}
+                        </p>
+                      )}
+                      {o.savings_cents != null && (
+                        <p className="mt-2 text-sm font-semibold text-amber-ink">
+                          You keep {fmtUsd(o.savings_cents)} — booked through YourFleet
+                        </p>
+                      )}
+                      {o.conditions && <p className="mt-1.5 text-sm text-steel">{o.conditions}</p>}
+                      {o.expires_at && (
+                        <p className="mt-1 text-xs text-faint">
+                          Valid through {new Date(o.expires_at).toLocaleDateString()}
+                        </p>
+                      )}
+                      {canBook && (
+                        <button
+                          className="btn mt-3"
+                          onClick={() => { setBookingOffer(o.id); setBookingOpen(true); }}
+                        >
+                          Book with this offer
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
               </ul>
             </section>
           )}
