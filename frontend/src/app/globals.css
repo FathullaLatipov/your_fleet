@@ -1,0 +1,75 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+
+/* YourFleet design tokens — road-signage palette:
+   pine = interstate guide-sign green (the single action color)
+   amber = safety amber, reserved for verified partner offers only */
+@theme {
+  --color-ink: #1a1d21;
+  --color-steel: #4a535e;
+  --color-faint: #8a929c;
+  --color-mist: #f5f6f5;
+  --color-panel: #ffffff;
+  --color-line: #d9dde0;
+  --color-pine: #1e5b38;
+  --color-pine-dark: #174a2d;
+  --color-pine-wash: #e9f1ec;
+  --color-amber: #e8a317;
+  --color-amber-wash: #fdf4df;
+  --color-amber-ink: #6e4e00;
+  --color-danger: #a4392e;
+  --color-danger-wash: #f9ebe9;
+
+  --font-sans: var(--font-barlow), "Helvetica Neue", Arial, sans-serif;
+  --font-display: var(--font-barlow-cond), var(--font-barlow), sans-serif;
+}
+
+body {
+  background: var(--color-mist);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+h1, h2, h3, .display {
+  font-family: var(--font-display);
+  letter-spacing: -0.01em;
+}
+
+/* Form controls: one consistent utility */
+.field {
+  @apply w-full rounded border border-line bg-panel px-3 py-2 text-[15px] text-ink placeholder:text-faint focus:outline-2 focus:outline-pine focus:outline-offset-0;
+}
+.btn {
+  @apply inline-flex items-center justify-center gap-2 rounded bg-pine px-4 py-2 text-[15px] font-semibold text-white hover:bg-pine-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine disabled:opacity-50 disabled:pointer-events-none;
+}
+.btn-quiet {
+  @apply inline-flex items-center justify-center gap-2 rounded border border-line bg-panel px-4 py-2 text-[15px] font-semibold text-ink hover:border-steel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine disabled:opacity-50;
+}
+.btn-danger {
+  @apply inline-flex items-center justify-center gap-2 rounded border border-danger/40 bg-panel px-4 py-2 text-[15px] font-semibold text-danger hover:bg-danger-wash focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger disabled:opacity-50;
+}
+
+/* Leaflet overrides to match the panel chrome */
+.leaflet-container {
+  font-family: var(--font-sans);
+}
+.yf-pin {
+  background: var(--color-steel);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.4);
+}
+.yf-pin--partner {
+  background: var(--color-amber);
+}
+.yf-pin--active {
+  background: var(--color-pine);
+  transform: scale(1.3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
