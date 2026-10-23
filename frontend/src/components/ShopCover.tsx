@@ -1,8 +1,9 @@
-/* Branded cover for shops without photos: charcoal plate, forest hazard
-   stripes, category mark, shop monogram. Deterministic per shop name so the
-   results page doesn't look repetitive — and clearly a cover, not a photo. */
+/* Illustrated cover for shops without photos: a category scene (semi, tires,
+   wrecker, service van...) on a dusk-road backdrop. Deterministic per shop
+   name — tint, composition and mirroring vary, so lists feel alive — and
+   clearly artwork, never passed off as a photo of the business. */
 
-const TINTS = ["#1f5c3c", "#174a2d", "#25543b"];
+const TINTS = ["#1f5c3c", "#2a6b47", "#17452b"];
 
 function hashCode(s: string): number {
   let h = 0;
@@ -15,18 +16,133 @@ function monogram(name: string): string {
   return ((words[0]?.[0] ?? "") + (words[1]?.[0] ?? "")).toUpperCase() || "YF";
 }
 
-const CATEGORY_MARK: Record<string, string> = {
-  // simple path icons drawn for 24x24
-  truck_trailer:
-    "M2 16V7h11v9M13 10h5l3 3v3h-3M2 16h2m3.5 0H13m4.5 0H21M6 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm9 2a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
-  tire: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Zm0-5a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm0-11v3m6.4 1.6-2.2 2.2M18.4 17.6l-2.2-2.2M12 20v-3m-6.4-1.4 2.2-2.2M5.6 6.4l2.2 2.2",
-  towing: "M3 17h13l5-5v5M8 17a2 2 0 1 1-4 0 2 2 0 0 1 4 0Zm11 0a2 2 0 1 1-4 0 2 2 0 0 1 4 0ZM7 12l3-6 4 6M10 6v6",
-  mobile_mechanic:
-    "M14.5 6.5a4 4 0 0 1 5-3.9l-2.8 2.8 2 2 2.8-2.8a4 4 0 0 1-5.2 4.9L8 17.8A2.1 2.1 0 1 1 5 14.9l7.6-7.6a4 4 0 0 1 1.9-.8Z",
-  pickup_auto:
-    "M3 15v-3l2-5h10l2 5h4v3h-2M3 15h2m4 0h6m4 0h2M7 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm10 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z",
-  other:
-    "M14.5 6.5a4 4 0 0 1 5-3.9l-2.8 2.8 2 2 2.8-2.8a4 4 0 0 1-5.2 4.9L8 17.8A2.1 2.1 0 1 1 5 14.9l7.6-7.6a4 4 0 0 1 1.9-.8Z",
+const BODY = "#39434e";
+const BODY_DARK = "#242c34";
+const TIRE = "#111417";
+const GLASS = "#9fb4c4";
+
+/* Each scene draws into a 160x100 viewBox; ground line is at y=78. */
+function SemiScene({ tint }: { tint: string }) {
+  return (
+    <g>
+      {/* trailer */}
+      <rect x="12" y="30" width="80" height="36" rx="2" fill={BODY} />
+      <rect x="12" y="30" width="80" height="7" rx="2" fill={tint} />
+      <rect x="12" y="62" width="80" height="4" fill={BODY_DARK} />
+      {/* cab */}
+      <path d="M96 66V38h12l5 6h8l5 12v10Z" fill={tint} />
+      <path d="M109 44l4 5h-9v-5Z" fill={GLASS} />
+      <rect x="97.5" y="26" width="3.5" height="12" rx="1" fill={BODY_DARK} />
+      <rect x="94" y="62" width="34" height="4" fill={BODY_DARK} />
+      {/* wheels */}
+      {[24, 38, 98, 110, 121].map((cx) => (
+        <g key={cx}>
+          <circle cx={cx} cy="70" r="7.5" fill={TIRE} />
+          <circle cx={cx} cy="70" r="3" fill={BODY} />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+function TireScene({ tint }: { tint: string }) {
+  return (
+    <g>
+      <circle cx="96" cy="52" r="26" fill={TIRE} />
+      <circle cx="96" cy="52" r="16" fill={BODY} />
+      <circle cx="96" cy="52" r="7" fill={tint} />
+      {Array.from({ length: 8 }).map((_, i) => {
+        const a = (i * Math.PI) / 4;
+        return (
+          <rect
+            key={i}
+            x="94.5"
+            y="24"
+            width="3"
+            height="8"
+            fill={BODY_DARK}
+            transform={`rotate(${(a * 180) / Math.PI} 96 52)`}
+          />
+        );
+      })}
+      {/* stacked tires */}
+      <ellipse cx="46" cy="72" rx="16" ry="6" fill={TIRE} />
+      <ellipse cx="46" cy="64" rx="16" ry="6" fill={BODY_DARK} />
+      <ellipse cx="46" cy="56" rx="16" ry="6" fill={TIRE} />
+      <ellipse cx="46" cy="52" rx="8" ry="2.5" fill={tint} />
+    </g>
+  );
+}
+
+function TowScene({ tint }: { tint: string }) {
+  return (
+    <g>
+      {/* flat bed + boom */}
+      <rect x="16" y="58" width="58" height="8" fill={BODY} />
+      <path d="M22 58 66 34l3 4-44 24Z" fill={BODY_DARK} />
+      <path d="M66 34v12" stroke={BODY_DARK} strokeWidth="2.5" />
+      <path d="M62 46h8l-4 7Z" fill={tint} />
+      {/* cab */}
+      <path d="M74 66V42h14l6 7h7l4 9v8Z" fill={tint} />
+      <path d="M89 47l4 5h-9v-5Z" fill={GLASS} />
+      <rect x="72" y="62" width="34" height="4" fill={BODY_DARK} />
+      {[28, 44, 80, 96].map((cx) => (
+        <g key={cx}>
+          <circle cx={cx} cy="70" r="7.5" fill={TIRE} />
+          <circle cx={cx} cy="70" r="3" fill={BODY} />
+        </g>
+      ))}
+      <circle cx="120" cy="40" r="5" fill="none" stroke={tint} strokeWidth="2.5" />
+    </g>
+  );
+}
+
+function VanScene({ tint }: { tint: string }) {
+  return (
+    <g>
+      <path d="M34 66V40a4 4 0 0 1 4-4h52l12 12v18Z" fill={tint} />
+      <path d="M88 40l8 8H78v-8Z" fill={GLASS} />
+      <rect x="34" y="58" width="68" height="4" fill={BODY_DARK} />
+      <rect x="40" y="44" width="26" height="10" rx="1.5" fill={BODY} />
+      {/* wrench emblem */}
+      <path
+        d="M118 32a7 7 0 0 1 8.7-6.8l-4.9 4.9 3.5 3.5 4.9-4.9A7 7 0 0 1 121 38l-9 9-3.7-3.7 9-9c.2-.8.4-1.5.7-2.3Z"
+        fill={BODY}
+      />
+      {[46, 88].map((cx) => (
+        <g key={cx}>
+          <circle cx={cx} cy="68" r="7.5" fill={TIRE} />
+          <circle cx={cx} cy="68" r="3" fill={BODY} />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+function PickupScene({ tint }: { tint: string }) {
+  return (
+    <g>
+      <path d="M36 66V52h30v-9a3 3 0 0 1 3-3h16l9 12h14l4 6v8Z" fill={tint} />
+      <path d="M72 44h11l6 8H72Z" fill={GLASS} />
+      <rect x="36" y="52" width="30" height="3" fill={BODY_DARK} />
+      <rect x="36" y="62" width="76" height="4" fill={BODY_DARK} />
+      {[48, 96].map((cx) => (
+        <g key={cx}>
+          <circle cx={cx} cy="68" r="7.5" fill={TIRE} />
+          <circle cx={cx} cy="68" r="3" fill={BODY} />
+        </g>
+      ))}
+    </g>
+  );
+}
+
+const SCENES: Record<string, (p: { tint: string }) => React.ReactNode> = {
+  truck_trailer: SemiScene,
+  tire: TireScene,
+  towing: TowScene,
+  mobile_mechanic: VanScene,
+  pickup_auto: PickupScene,
+  other: SemiScene,
 };
 
 export function ShopCover({
@@ -42,31 +158,48 @@ export function ShopCover({
   className?: string;
   showLabel?: boolean;
 }) {
-  const tint = TINTS[hashCode(name) % TINTS.length];
-  const mark = CATEGORY_MARK[category] ?? CATEGORY_MARK.other;
+  const h = hashCode(name);
+  const tint = TINTS[h % TINTS.length];
+  const flip = h % 2 === 1;
+  const sunX = 20 + (h % 5) * 28;
+  const Scene = SCENES[category] ?? SCENES.other;
   return (
-    <div
-      aria-hidden
-      className={`relative grid place-items-center overflow-hidden bg-charcoal ${className}`}
-    >
-      <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="xMidYMid slice" viewBox="0 0 160 100">
-        <rect width="160" height="100" fill="#16181b" />
-        <g opacity="0.5">
-          <path d="M-20 100 40 0h14L-6 100Z" fill={tint} />
-          <path d="M20 100 80 0h7L27 100Z" fill={tint} opacity="0.6" />
-          <path d="M120 100 180 0h14l-60 100Z" fill={tint} opacity="0.8" />
+    <div aria-hidden className={`relative overflow-hidden bg-charcoal ${className}`}>
+      <svg
+        className="absolute inset-0 h-full w-full"
+        preserveAspectRatio="xMidYMax slice"
+        viewBox="0 0 160 100"
+      >
+        {/* dusk sky */}
+        <rect width="160" height="100" fill="#14181a" />
+        <rect width="160" height="100" fill={tint} opacity="0.14" />
+        <circle cx={sunX} cy="26" r="9" fill="#e8a317" opacity="0.55" />
+        <circle cx={sunX} cy="26" r="16" fill="#e8a317" opacity="0.12" />
+        {/* distant ridge */}
+        <path d="M0 62 40 50l30 8 36-12 54 14v40H0Z" fill="#10231a" opacity="0.8" />
+        {/* road */}
+        <rect y="78" width="160" height="22" fill="#1c2125" />
+        <g stroke="#e8a317" strokeWidth="1.6" strokeDasharray="8 7" opacity="0.5">
+          <line x1="0" y1="88" x2="160" y2="88" />
+        </g>
+        <g transform={flip ? "translate(160 0) scale(-1 1)" : undefined}>
+          <Scene tint={tint} />
         </g>
       </svg>
-      <div className="relative flex flex-col items-center gap-1 text-white/85">
-        <svg viewBox="0 0 24 24" className="h-7 w-7" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round">
-          <path d={mark} />
-        </svg>
-        <span className="display text-sm font-bold tracking-widest">{monogram(name)}</span>
-        {locality && showLabel && (
-          <span className="display text-xs font-semibold tracking-wide text-white/70">{locality}</span>
-        )}
-        {showLabel && <span className="text-[11px] text-white/50">No photos yet</span>}
+      {/* monogram plate */}
+      <div className="absolute left-2.5 top-2.5 rounded bg-charcoal/70 px-2 py-0.5">
+        <span className="display text-xs font-bold tracking-widest text-white/90">
+          {monogram(name)}
+        </span>
       </div>
+      {showLabel && (
+        <div className="absolute bottom-2 right-2.5 text-right">
+          {locality && (
+            <p className="display text-xs font-semibold tracking-wide text-white/80">{locality}</p>
+          )}
+          <p className="text-[10px] text-white/50">Illustration — no photos yet</p>
+        </div>
+      )}
     </div>
   );
 }

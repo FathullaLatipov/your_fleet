@@ -74,12 +74,37 @@ def public_stats(db: Session = Depends(get_db)):
         "AND o.standard_price_cents IS NOT NULL "
         "AND o.standard_price_cents > bk.final_price_cents"
     )).scalar_one()
+    # Facet counts: the search UI shows a filter only when it can match something.
+    facets = db.execute(text(
+        "SELECT "
+        " count(*) FILTER (WHERE partner_status = 'active') AS partners,"
+        " count(*) FILTER (WHERE identity_verified_at IS NOT NULL) AS verified,"
+        " count(*) FILTER (WHERE is_mobile_service IS TRUE) AS mobile,"
+        " count(*) FILTER (WHERE accepts_emergency IS TRUE) AS emergency,"
+        " count(*) FILTER (WHERE hours IS NOT NULL) AS with_hours,"
+        " count(*) FILTER (WHERE EXISTS ("
+        "   SELECT 1 FROM business_services bs WHERE bs.business_id = businesses.id"
+        "   AND bs.standard_price_cents IS NOT NULL)) AS with_prices,"
+        " count(*) FILTER (WHERE EXISTS ("
+        "   SELECT 1 FROM offers o WHERE o.business_id = businesses.id"
+        "   AND o.status = 'approved')) AS with_offers "
+        "FROM businesses WHERE is_published"
+    )).one()
     return {
         "businesses": businesses,
         "partners": partners,
         "states": states,
         "completed_bookings": completed,
         "driver_savings_cents": int(savings),
+        "facets": {
+            "partners": facets.partners,
+            "verified": facets.verified,
+            "mobile": facets.mobile,
+            "emergency": facets.emergency,
+            "with_hours": facets.with_hours,
+            "with_prices": facets.with_prices,
+            "with_offers": facets.with_offers,
+        },
     }
 
 

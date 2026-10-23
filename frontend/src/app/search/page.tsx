@@ -16,13 +16,25 @@ const MapView = dynamic(() => import("@/components/MapView"), {
   loading: () => <div className="flex h-full items-center justify-center text-faint">Loading map…</div>,
 });
 
-const CHIP_FILTERS: [key: string, label: string][] = [
-  ["partners", "Partners"],
-  ["offers", "With offers"],
-  ["verified", "Verified"],
-  ["mobile", "Mobile service"],
-  ["emergency", "Emergency"],
-  ["open", "Open now"],
+interface Facets {
+  partners: number;
+  verified: number;
+  mobile: number;
+  emergency: number;
+  with_hours: number;
+  with_prices: number;
+  with_offers: number;
+}
+
+// Each chip appears only when the platform has shops it can match,
+// so filters never lead to a guaranteed-empty result.
+const CHIP_FILTERS: [key: string, label: string, facet: keyof Facets][] = [
+  ["partners", "Partners", "partners"],
+  ["offers", "With offers", "with_offers"],
+  ["verified", "Verified", "verified"],
+  ["mobile", "Mobile service", "mobile"],
+  ["emergency", "Emergency", "emergency"],
+  ["open", "Open now", "with_hours"],
 ];
 
 function SearchPageInner() {
@@ -35,6 +47,13 @@ function SearchPageInner() {
   const [loading, setLoading] = useState(true);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false); // mobile toggle
+  const [facets, setFacets] = useState<Facets | null>(null);
+
+  useEffect(() => {
+    api<{ facets: Facets }>("/api/stats/public")
+      .then((d) => setFacets(d.facets))
+      .catch(() => setFacets(null));
+  }, []);
 
   const lat = params.get("lat");
   const lng = params.get("lng");
@@ -164,24 +183,32 @@ function SearchPageInner() {
           >
             {hasPoint && <option value="distance">Nearest first</option>}
             <option value="rating">Highest rated</option>
-            <option value="price">Lowest price first</option>
+            {(facets?.with_prices ?? 0) > 0 && <option value="price">Lowest price first</option>}
           </select>
         </form>
-        <div className="mt-2.5 flex flex-wrap gap-2" role="group" aria-label="Filters">
-          {CHIP_FILTERS.map(([key, label]) => (
-            <button
-              key={key}
-              type="button"
-              className="chip"
-              data-on={flag(key)}
-              aria-pressed={flag(key)}
-              onClick={() => setParam({ [key]: flag(key) ? null : "1" })}
-            >
-              {flag(key) && <span aria-hidden>✓</span>}
-              {label}
-            </button>
-          ))}
-        </div>
+        {(() => {
+          const visible = CHIP_FILTERS.filter(
+            ([key, , facet]) => flag(key) || (facets?.[facet] ?? 0) > 0,
+          );
+          if (visible.length === 0) return null;
+          return (
+            <div className="mt-2.5 flex flex-wrap gap-2" role="group" aria-label="Filters">
+              {visible.map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className="chip"
+                  data-on={flag(key)}
+                  aria-pressed={flag(key)}
+                  onClick={() => setParam({ [key]: flag(key) ? null : "1" })}
+                >
+                  {flag(key) && <span aria-hidden>✓</span>}
+                  {label}
+                </button>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Mobile map/list toggle */}
