@@ -61,6 +61,10 @@ export default function BusinessPage() {
     `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${b.name} ${b.address_raw ?? `${b.lat},${b.lng}`}`)}`;
   const canBook = user && (user.role === "driver" || user.role === "fleet_manager");
   const status = openStatus(b.hours);
+  const savePcts = b.offers
+    .filter((o) => o.savings_cents != null && o.standard_price_cents)
+    .map((o) => Math.round((o.savings_cents! / o.standard_price_cents!) * 100));
+  const maxSavePct = savePcts.length ? Math.max(...savePcts) : null;
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
@@ -82,6 +86,7 @@ export default function BusinessPage() {
         </div>
       ) : (
         <ShopCover name={b.name} category={b.category} showLabel
+                   locality={b.city ? `${b.city}, ${b.state ?? ""}` : b.state}
                    className="h-44 rounded-lg sm:h-52" />
       )}
 
@@ -109,6 +114,14 @@ export default function BusinessPage() {
               {status.label}
             </span>
           </div>
+          {maxSavePct != null && (
+            <a
+              href="#offers"
+              className="mt-3 inline-flex items-center gap-2 rounded-md bg-cta px-3 py-1.5 text-sm font-bold text-ink hover:bg-cta-hover"
+            >
+              Partner offer — save up to {maxSavePct}% ↓
+            </a>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           {b.phone && (
@@ -132,7 +145,7 @@ export default function BusinessPage() {
         <div className="space-y-8">
           {/* Offers — amber is reserved for this block */}
           {b.offers.length > 0 && (
-            <section className="rounded border border-amber/60 bg-amber-wash p-5">
+            <section id="offers" className="rounded border border-amber/60 bg-amber-wash p-5 scroll-mt-20">
               <h2 className="text-xl font-bold text-amber-ink">Verified partner offers</h2>
               <p className="mt-1 text-sm text-amber-ink/80">
                 Negotiated with this shop under a marketplace agreement. Final invoice may add
@@ -369,6 +382,34 @@ export default function BusinessPage() {
           onClose={() => setBookingOpen(false)}
         />
       )}
+
+      {/* One-tap mobile action bar */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-[900] flex gap-2 border-t border-line bg-panel p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-[0_-4px_16px_rgb(22_24_27/0.12)] lg:hidden"
+        role="group"
+        aria-label="Quick actions"
+      >
+        {b.phone && (
+          <a href={`tel:${b.phone}`} className="btn-forest flex-1 !py-2.5">Call</a>
+        )}
+        <a href={directions} target="_blank" rel="noopener noreferrer" className="btn-quiet flex-1 !py-2.5">
+          Directions
+        </a>
+        {canBook ? (
+          <button
+            className="btn flex-[1.4] !py-2.5"
+            onClick={() => { setBookingOffer(null); setBookingOpen(true); }}
+          >
+            Request repair
+          </button>
+        ) : !user ? (
+          <Link href={`/login?next=/business/${b.id}`} className="btn flex-[1.4] !py-2.5">
+            Request repair
+          </Link>
+        ) : null}
+      </div>
+      {/* Spacer so the fixed bar never covers content on mobile */}
+      <div className="h-20 lg:hidden" aria-hidden />
     </div>
   );
 }

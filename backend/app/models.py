@@ -131,6 +131,10 @@ class Business(Base):
     google_rating: Mapped[float | None] = mapped_column(Float)
     google_rating_count: Mapped[int | None] = mapped_column(Integer)
     google_place_url: Mapped[str | None] = mapped_column(String(512))
+    # Place IDs may be stored indefinitely per Google's policy; rating data is
+    # refreshed via `cli enrich-google --stale-days N` runs.
+    google_place_id: Mapped[str | None] = mapped_column(String(128))
+    google_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -54,6 +54,23 @@ def cmd_seed_services(_: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_enrich_google(args: argparse.Namespace) -> int:
+    from app.services.google_places import enrich_businesses, make_default_search_fn
+
+    try:
+        search_fn = make_default_search_fn(qps=args.qps)
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    with SessionLocal() as db:
+        report = enrich_businesses(
+            db, search_fn,
+            limit=args.limit, stale_days=args.stale_days, dry_run=args.dry_run,
+        )
+    print(json.dumps(report.as_dict(), indent=2))
+    return 0
+
+
 def cmd_create_admin(args: argparse.Namespace) -> int:
     from app.models import User, UserRole
     from app.security import hash_password
@@ -87,6 +104,17 @@ def main() -> int:
 
     p_seed = sub.add_parser("seed-services", help="Seed the service-type catalog")
     p_seed.set_defaults(func=cmd_seed_services)
+
+    p_g = sub.add_parser(
+        "enrich-google",
+        help="Fill google_rating/url from Places API (needs GOOGLE_PLACES_API_KEY)",
+    )
+    p_g.add_argument("--limit", type=int, default=None, help="Max businesses this run")
+    p_g.add_argument("--stale-days", type=int, default=30,
+                     help="Re-check rows older than this (Google caching policy)")
+    p_g.add_argument("--qps", type=float, default=5.0, help="Max requests per second")
+    p_g.add_argument("--dry-run", action="store_true", help="Fetch and report, persist nothing")
+    p_g.set_defaults(func=cmd_enrich_google)
 
     p_adm = sub.add_parser("create-admin", help="Create a platform administrator")
     p_adm.add_argument("email")

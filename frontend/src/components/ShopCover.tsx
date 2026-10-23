@@ -32,11 +32,13 @@ const CATEGORY_MARK: Record<string, string> = {
 export function ShopCover({
   name,
   category,
+  locality,
   className = "",
   showLabel = false,
 }: {
   name: string;
   category: string;
+  locality?: string | null;
   className?: string;
   showLabel?: boolean;
 }) {
@@ -60,6 +62,9 @@ export function ShopCover({
           <path d={mark} />
         </svg>
         <span className="display text-sm font-bold tracking-widest">{monogram(name)}</span>
+        {locality && showLabel && (
+          <span className="display text-xs font-semibold tracking-wide text-white/70">{locality}</span>
+        )}
         {showLabel && <span className="text-[11px] text-white/50">No photos yet</span>}
       </div>
     </div>

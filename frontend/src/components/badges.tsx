@@ -58,6 +58,20 @@ export function Stars({ avg, count }: { avg: number | null; count: number }) {
   );
 }
 
+/** Third-party rating, always attributed. Rendered only when real data exists. */
+export function GoogleRating({ rating, count }: { rating: number | null; count: number | null }) {
+  if (rating == null) return null;
+  return (
+    <span
+      className="text-sm text-steel"
+      aria-label={`Rated ${rating} out of 5 on Google${count ? ` from ${count} reviews` : ""}`}
+    >
+      <span className="font-semibold text-amber-ink">{rating.toFixed(1)}★</span>{" "}
+      on Google{count != null && <span className="text-faint"> ({count.toLocaleString()})</span>}
+    </span>
+  );
+}
+
 const STATUS_STYLES: Record<string, string> = {
   requested: "bg-mist text-steel",
   quoted: "bg-amber-wash text-amber-ink",

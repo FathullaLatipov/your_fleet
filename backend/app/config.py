@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     cors_origins: str = "http://localhost:3000"
     environment: str = "development"
     media_dir: str = "media"
+    google_places_api_key: str = ""
 
     @property
     def cors_origin_list(self) -> list[str]:

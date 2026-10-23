@@ -74,7 +74,11 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
     }
     conditions: list[str] = []
     distance_col = ", NULL::float AS distance_m"
-    order = "ORDER BY b.rating_avg DESC NULLS LAST, b.rating_count DESC, b.name"
+    # "Highest rated": best of YourFleet and Google ratings, most-reviewed first.
+    order = (
+        "ORDER BY GREATEST(coalesce(b.rating_avg, 0), coalesce(b.google_rating, 0)) DESC, "
+        "coalesce(b.rating_count, 0) + coalesce(b.google_rating_count, 0) DESC, b.name"
+    )
 
     has_point = f.lat is not None and f.lng is not None
     if has_point:

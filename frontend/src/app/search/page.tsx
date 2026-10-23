@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
-import { Stars, TrustBadges } from "@/components/badges";
+import { GoogleRating, Stars, TrustBadges } from "@/components/badges";
 import { ShopCover } from "@/components/ShopCover";
 import { api } from "@/lib/api";
 import { openStatus } from "@/lib/hours";
@@ -258,7 +258,13 @@ function SearchPageInner() {
                         )}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-sm text-steel">
-                        <Stars avg={b.rating_avg} count={b.rating_count} />
+                        {b.rating_count > 0 ? (
+                          <Stars avg={b.rating_avg} count={b.rating_count} />
+                        ) : b.google_rating != null ? (
+                          <GoogleRating rating={b.google_rating} count={b.google_rating_count} />
+                        ) : (
+                          <Stars avg={null} count={0} />
+                        )}
                         <span>{CATEGORY_LABELS[b.category] ?? b.category}</span>
                         {b.city && <span>{b.city}, {b.state}</span>}
                       </div>

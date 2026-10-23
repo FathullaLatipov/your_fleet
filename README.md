@@ -84,6 +84,27 @@ ordering/radius, offer validation & visibility rules, every booking state
 transition, optimistic-concurrency conflicts, commission math, review
 eligibility, and the claim flow.
 
+## Google Places enrichment (optional)
+
+`python -m app.cli enrich-google [--limit N] [--stale-days 30] [--qps 5] [--dry-run]`
+fills `google_rating`, `google_rating_count`, `google_place_url` and
+`google_place_id` from the Places API (New) Text Search, once
+`GOOGLE_PLACES_API_KEY` is set in `backend/.env`. Behavior:
+
+- Conservative matching: a Place is accepted only within 400 m of our stored
+  coordinates **and** with sufficient name similarity; no confident match
+  leaves fields empty.
+- Resumable and idempotent: every checked row is stamped `google_synced_at`;
+  re-runs only process unchecked or stale rows. Run with `--stale-days 30`
+  on a schedule to respect Google's data-caching policy (place IDs may be
+  kept indefinitely; ratings must be refreshed).
+- Rate limited (`--qps`) with exponential backoff on 429/5xx; aborts after
+  25 consecutive API errors.
+- Place Photos are deliberately not downloaded: Google's policy forbids
+  caching photo content.
+- UI shows Google ratings with explicit "on Google" attribution, on shop
+  pages and search cards (YourFleet's own verified reviews take precedence).
+
 ## Environment variables
 
 | Variable | Where | Purpose |
@@ -94,6 +115,7 @@ eligibility, and the claim flow.
 | `CORS_ORIGINS` | backend `.env` | Comma-separated allowed origins |
 | `ENVIRONMENT` | backend `.env` | `development` / `production` |
 | `NEXT_PUBLIC_API_URL` | frontend `.env.local` | Backend base URL |
+| `GOOGLE_PLACES_API_KEY` | backend `.env` | Optional; enables `enrich-google` |
 
 ## Domain model & trust levels
 
