@@ -4,6 +4,7 @@ sqlalchemy>=2.1
 alembic>=1.20
 psycopg[binary]>=3.3
 pydantic-settings>=2.16
+email-validator>=2.2
 bcrypt>=5.0
 pyjwt>=2.15
 python-multipart>=0.0.20
