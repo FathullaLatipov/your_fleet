@@ -2,10 +2,12 @@
   "truck_trailer": [
     "truckstop.jpg",
     "semi-white.jpg",
+    "workshop.jpg",
     "mack-classic.jpg"
   ],
   "tire": [
     "tires-haul.jpg",
+    "workshop.jpg",
     "truckstop.jpg"
   ],
   "towing": [
@@ -14,9 +16,11 @@
   ],
   "mobile_mechanic": [
     "mechanic-engine.jpg",
+    "workshop.jpg",
     "semi-white.jpg"
   ],
   "pickup_auto": [
+    "workshop.jpg",
     "mack-classic.jpg",
     "truckstop.jpg"
   ],
