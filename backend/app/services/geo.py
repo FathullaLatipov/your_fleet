@@ -70,6 +70,21 @@ LIMIT :limit OFFSET :offset
 """
 
 
+def _apply_geo(f: SearchFilters, params: dict, conditions: list[str]) -> bool:
+    """Radius predicate (GiST-indexed earth_box + exact earth_distance)."""
+    has_point = f.lat is not None and f.lng is not None
+    if has_point:
+        radius_m = min(max(f.radius_miles, 1.0), MAX_RADIUS_MILES) * METERS_PER_MILE
+        params.update(lat=f.lat, lng=f.lng, radius_m=radius_m)
+        conditions.append(
+            "earth_box(ll_to_earth(:lat, :lng), :radius_m) @> ll_to_earth(b.lat, b.lng)"
+        )
+        conditions.append(
+            "earth_distance(ll_to_earth(:lat, :lng), ll_to_earth(b.lat, b.lng)) <= :radius_m"
+        )
+    return has_point
+
+
 def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
     params: dict = {
         "now": datetime.now(timezone.utc),
@@ -84,22 +99,57 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
         "coalesce(b.rating_count, 0) + coalesce(b.google_rating_count, 0) DESC, b.name"
     )
 
-    has_point = f.lat is not None and f.lng is not None
-    if has_point:
-        radius_m = min(max(f.radius_miles, 1.0), MAX_RADIUS_MILES) * METERS_PER_MILE
-        params.update(lat=f.lat, lng=f.lng, radius_m=radius_m)
+    if _apply_geo(f, params, conditions):
         distance_col = (
             ", earth_distance(ll_to_earth(:lat, :lng), ll_to_earth(b.lat, b.lng)) AS distance_m"
-        )
-        conditions.append(
-            "earth_box(ll_to_earth(:lat, :lng), :radius_m) @> ll_to_earth(b.lat, b.lng)"
-        )
-        conditions.append(
-            "earth_distance(ll_to_earth(:lat, :lng), ll_to_earth(b.lat, b.lng)) <= :radius_m"
         )
         if f.sort == "distance":
             order = "ORDER BY distance_m ASC"
 
+    extra_cols = _apply_filters(f, params, conditions)
+    if f.sort == "price":
+        order = "ORDER BY price_from_cents ASC NULLS LAST, b.name"
+
+    cond_sql = "".join(f"  AND {c}\n" for c in conditions)
+    sql = _BASE.format(distance_col=distance_col, conditions=cond_sql, order=order,
+                       extra_cols=extra_cols)
+    rows = [dict(r._mapping) for r in db.execute(text(sql), params)]
+
+    count_sql = f"SELECT count(*) FROM businesses b WHERE b.is_published = true\n{cond_sql}"
+    total = db.execute(text(count_sql), params).scalar_one()
+
+    for r in rows:
+        r["distance_miles"] = (
+            round(r.pop("distance_m") / METERS_PER_MILE, 1) if r.get("distance_m") is not None
+            else r.pop("distance_m", None)
+        )
+    return rows, total
+
+
+def search_map_points(db: Session, f: SearchFilters, limit: int = 3000) -> list[dict]:
+    """Slim result set for the map: every match (capped), minimal fields."""
+    params: dict = {"now": datetime.now(timezone.utc), "limit": min(max(limit, 1), 5000)}
+    conditions: list[str] = []
+    _apply_geo(f, params, conditions)
+    _apply_filters(f, params, conditions)
+    cond_sql = "".join(f"  AND {c}\n" for c in conditions)
+    sql = f"""
+SELECT b.id, b.name, b.lat, b.lng, b.city, b.state, b.partner_status,
+       (b.partner_status = 'active' AND EXISTS (
+         SELECT 1 FROM offers o WHERE o.business_id = b.id AND o.status = 'approved'
+           AND (o.starts_at IS NULL OR o.starts_at <= :now)
+           AND (o.expires_at IS NULL OR o.expires_at > :now)
+       )) AS has_active_offer
+FROM businesses b
+WHERE b.is_published = true
+{cond_sql}
+LIMIT :limit
+"""
+    return [dict(r._mapping) for r in db.execute(text(sql), params)]
+
+
+def _apply_filters(f: SearchFilters, params: dict, conditions: list[str]) -> str:
+    """Non-geo filters; returns the extra SELECT columns for the full search."""
     if f.q:
         params["q"] = f"%{f.q.strip()}%"
         conditions.append("(b.name ILIKE :q OR b.city ILIKE :q)")
@@ -127,8 +177,6 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
     if f.zip_code:
         params["zip"] = f.zip_code.strip()
         conditions.append("b.zip_code = :zip")
-    if f.sort == "price":
-        order = "ORDER BY price_from_cents ASC NULLS LAST, b.name"
     if f.partner_only:
         conditions.append("b.partner_status = 'active'")
     if f.mobile_only:
@@ -163,21 +211,7 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
             f" SELECT 1 FROM jsonb_array_elements(b.hours->'{day}') AS r"
             " WHERE r->>0 <= :hhmm AND r->>1 > :hhmm)"
         )
-
-    cond_sql = "".join(f"  AND {c}\n" for c in conditions)
-    sql = _BASE.format(distance_col=distance_col, conditions=cond_sql, order=order,
-                       extra_cols=extra_cols)
-    rows = [dict(r._mapping) for r in db.execute(text(sql), params)]
-
-    count_sql = f"SELECT count(*) FROM businesses b WHERE b.is_published = true\n{cond_sql}"
-    total = db.execute(text(count_sql), params).scalar_one()
-
-    for r in rows:
-        r["distance_miles"] = (
-            round(r.pop("distance_m") / METERS_PER_MILE, 1) if r.get("distance_m") is not None
-            else r.pop("distance_m", None)
-        )
-    return rows, total
+    return extra_cols
 
 
 def locate_area(db: Session, query: str) -> tuple[float, float] | None:

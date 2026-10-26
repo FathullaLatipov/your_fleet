@@ -34,7 +34,7 @@ from app.schemas import (
     ServiceOut,
 )
 from app.security import get_current_user
-from app.services.geo import SearchFilters, locate_area, search_businesses
+from app.services.geo import SearchFilters, locate_area, search_businesses, search_map_points
 
 router = APIRouter(prefix="/api", tags=["businesses"])
 
@@ -153,6 +153,42 @@ def search(
         "items": [BusinessListItem(**r) for r in rows],
         "resolved_location": resolved_from_location,
     }
+
+
+@router.get("/search/map")
+def search_map(
+    db: Session = Depends(get_db),
+    lat: float | None = Query(default=None, ge=-90, le=90),
+    lng: float | None = Query(default=None, ge=-180, le=180),
+    location: str | None = Query(default=None, max_length=128),
+    radius_miles: float = Query(default=50, ge=1, le=300),
+    q: str | None = Query(default=None, max_length=128),
+    category: str | None = None,
+    service: str | None = Query(default=None, max_length=64),
+    state: str | None = Query(default=None, max_length=2),
+    partner_only: bool = False,
+    verified_only: bool = False,
+    has_offer: bool = False,
+    mobile_only: bool = False,
+    emergency_only: bool = False,
+    min_rating: float | None = Query(default=None, ge=1, le=5),
+    min_reviews: int = Query(default=0, ge=0, le=100000),
+    open_now: bool = False,
+):
+    """Every match for the map layer (capped at 3000), minimal fields —
+    the paginated list and the map stay in sync filter-wise."""
+    if (lat is None or lng is None) and location:
+        point = locate_area(db, location)
+        if point:
+            lat, lng = point
+    filters = SearchFilters(
+        lat=lat, lng=lng, radius_miles=radius_miles, q=q, category=category,
+        service_slug=service, state=state, partner_only=partner_only,
+        verified_only=verified_only, has_offer=has_offer, mobile_only=mobile_only,
+        emergency_only=emergency_only, min_rating=min_rating, min_reviews=min_reviews,
+        open_now=open_now,
+    )
+    return {"items": search_map_points(db, filters)}
 
 
 def _active_offers(db: Session, business: Business) -> list[Offer]:

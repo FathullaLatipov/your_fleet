@@ -160,6 +160,18 @@ export interface Claim {
   reviewed_at: string | null;
 }
 
+export interface MapPoint {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  city: string | null;
+  state: string | null;
+  partner_status: "none" | "active" | "suspended";
+  has_active_offer: boolean;
+  distance_miles?: number | null;
+}
+
 export interface SearchResponse {
   total: number;
   items: BusinessListItem[];

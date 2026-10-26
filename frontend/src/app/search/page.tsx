@@ -9,7 +9,7 @@ import { GoogleRating, Stars, TrustBadges } from "@/components/badges";
 import { ShopImage } from "@/components/ShopImage";
 import { api } from "@/lib/api";
 import { openStatus } from "@/lib/hours";
-import { CATEGORY_LABELS, fmtUsd, type SearchResponse } from "@/lib/types";
+import { CATEGORY_LABELS, fmtUsd, type MapPoint, type SearchResponse } from "@/lib/types";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -48,6 +48,7 @@ function SearchPageInner() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showMap, setShowMap] = useState(false); // mobile toggle
   const [facets, setFacets] = useState<Facets | null>(null);
+  const [mapItems, setMapItems] = useState<MapPoint[]>([]);
 
   useEffect(() => {
     api<{ facets: Facets }>("/api/stats/public")
@@ -108,6 +109,26 @@ function SearchPageInner() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    // The map gets EVERY match (not just the current page) via a slim endpoint.
+    api<{ items: MapPoint[] }>("/api/search/map", {
+      params: {
+        lat: lat ?? undefined,
+        lng: lng ?? undefined,
+        location: !lat ? (params.get("location") ?? undefined) : undefined,
+        radius_miles: radius,
+        category: category || undefined,
+        partner_only: flag("partners"),
+        has_offer: flag("offers"),
+        verified_only: flag("verified"),
+        mobile_only: flag("mobile"),
+        emergency_only: flag("emergency"),
+        open_now: flag("open"),
+      },
+    })
+      .then((d) => {
+        if (!cancelled) setMapItems(d.items);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -334,7 +355,7 @@ function SearchPageInner() {
 
         {/* Map */}
         <div className={`relative min-h-0 flex-1 ${showMap ? "" : "hidden lg:block"}`}>
-          <MapView items={items} activeId={activeId} onSelect={setActiveId} />
+          <MapView items={mapItems.length ? mapItems : items} activeId={activeId} onSelect={setActiveId} />
           <div className="absolute bottom-3 left-3 z-[500] rounded-md border border-line bg-panel/95 px-3 py-2 text-xs text-steel shadow">
             <span className="mr-3 inline-flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-charcoal" /> Directory

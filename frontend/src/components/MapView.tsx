@@ -1,13 +1,13 @@
-"use client";
+﻿"use client";
 
 import L from "leaflet";
 import "leaflet.markercluster";
 import { useEffect, useRef } from "react";
 import { MapContainer, TileLayer, useMap } from "react-leaflet";
 
-import type { BusinessListItem } from "@/lib/types";
+import type { MapPoint } from "@/lib/types";
 
-function pinIcon(b: BusinessListItem, active: boolean) {
+function pinIcon(b: MapPoint, active: boolean) {
   const variant = active
     ? "yf-pin--active"
     : b.partner_status === "active" && b.has_active_offer
@@ -33,7 +33,7 @@ function ClusterLayer({
   activeId,
   onSelect,
 }: {
-  items: BusinessListItem[];
+  items: MapPoint[];
   activeId: string | null;
   onSelect: (id: string) => void;
 }) {
@@ -44,6 +44,7 @@ function ClusterLayer({
   useEffect(() => {
     const group = L.markerClusterGroup({
       maxClusterRadius: 44,
+      chunkedLoading: true,
       showCoverageOnHover: false,
       iconCreateFunction: (cluster) =>
         L.divIcon({
@@ -90,7 +91,7 @@ export default function MapView({
   activeId,
   onSelect,
 }: {
-  items: BusinessListItem[];
+  items: MapPoint[];
   activeId: string | null;
   onSelect: (id: string) => void;
 }) {
