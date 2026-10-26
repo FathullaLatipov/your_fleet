@@ -82,6 +82,16 @@ function SectionCard({
 
 const cleanAddress = (a: string) => a.replace(/,?\s*(США|USA|United States)\s*$/i, "");
 
+/* Typical service sets by category — shown only as "typical for this kind of
+   shop" with an explicit unconfirmed note, never as the shop's own list. */
+const TYPICAL_SERVICES: Record<string, string[]> = {
+  tire: ["Commercial truck tires", "Tire repair & replacement", "Roadside tire service", "Balancing & rotation"],
+  towing: ["Heavy-duty towing", "Accident recovery", "Winch-out service", "Roadside assistance"],
+  mobile_mechanic: ["Mobile repair at your location", "Roadside breakdowns", "Diagnostics"],
+  pickup_auto: ["Auto & light-duty repair", "Oil changes & maintenance", "Brakes & suspension", "Diagnostics"],
+  truck_trailer: ["Diesel engine repair", "Brakes & suspension", "Electrical & diagnostics", "Preventive maintenance", "Trailer repair"],
+};
+
 function BusinessPageInner() {
   const { id } = useParams<{ id: string }>();
   const qs = useSearchParams();
@@ -291,19 +301,24 @@ function BusinessPageInner() {
 
           <SectionCard icon="wrench" title="Services">
             {b.services.length === 0 ? (
-              <div className="rounded-lg border border-dashed border-line bg-mist/60 px-4 py-6 text-center">
-                <p className="text-sm text-steel">
-                  {b.google_primary_type ? (
-                    <>Listed on Google as <strong className="text-ink">{b.google_primary_type}</strong>.
-                      A detailed service list appears once the owner claims this listing —
-                      call to confirm specifics.</>
-                  ) : (
-                    "Service list not provided yet — call the shop to confirm what they handle."
+              <div>
+                <div className="flex flex-wrap gap-2">
+                  {(TYPICAL_SERVICES[b.category] ?? TYPICAL_SERVICES.truck_trailer).map((s) => (
+                    <span key={s} className="rounded-full bg-pine-wash px-3 py-1.5 text-sm font-medium text-pine">
+                      {s}
+                    </span>
+                  ))}
+                </div>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-line bg-mist/60 px-4 py-3">
+                  <p className="text-sm text-steel">
+                    Typical for {b.google_primary_type
+                      ? <>a <strong className="text-ink">{b.google_primary_type}</strong> (per its Google listing)</>
+                      : "this kind of shop"} — not confirmed by the owner yet. Call to check specifics.
+                  </p>
+                  {b.phone && (
+                    <a href={`tel:${b.phone}`} className="btn-quiet !py-1.5 text-sm">Call the shop</a>
                   )}
-                </p>
-                {b.phone && (
-                  <a href={`tel:${b.phone}`} className="btn-quiet mt-3 !py-2 text-sm">Call the shop</a>
-                )}
+                </div>
               </div>
             ) : (
               <ul className="divide-y divide-line/70">
@@ -336,6 +351,27 @@ function BusinessPageInner() {
 
           <SectionCard icon="star" title="Reviews"
                        right={reviews.length > 0 ? <Stars avg={b.rating_avg} count={b.rating_count} /> : undefined}>
+            {b.google_rating != null && (
+              <div className="mb-4 flex flex-wrap items-center gap-x-5 gap-y-3 rounded-lg bg-mist/70 p-4">
+                <div className="flex items-baseline gap-2">
+                  <span className="display text-4xl font-bold">{b.google_rating.toFixed(1)}</span>
+                  <span aria-hidden className="text-lg text-amber">
+                    {"★".repeat(Math.round(b.google_rating))}
+                    <span className="text-line">{"★".repeat(5 - Math.round(b.google_rating))}</span>
+                  </span>
+                </div>
+                <p className="text-sm text-steel">
+                  {b.google_rating_count != null && (
+                    <strong className="text-ink">{b.google_rating_count.toLocaleString()} reviews</strong>
+                  )}{" "}
+                  on Google
+                </p>
+                <a href={googleUrl} target="_blank" rel="noopener noreferrer"
+                   className="btn-quiet ml-auto !py-1.5 text-sm">
+                  Read reviews on Google
+                </a>
+              </div>
+            )}
             {reviews.length === 0 ? (
               <div className="rounded-lg border border-dashed border-line bg-mist/60 px-4 py-6 text-center">
                 <p className="text-sm text-steel">

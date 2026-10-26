@@ -35,14 +35,13 @@ FIELD_MASK = (
 )
 
 # Google primaryType -> our coarse category, used to sharpen search filters.
-# Only types we're confident about; anything else leaves the category as-is.
+# Only unambiguous types: Google tags many heavy-truck shops with the generic
+# car_repair/auto_repair types, so those must NOT reclassify anything.
 TYPE_TO_CATEGORY = {
     "tire_shop": "tire",
     "towing_service": "towing",
     "truck_repair_shop": "truck_trailer",
     "trailer_repair_shop": "truck_trailer",
-    "auto_repair_shop": "pickup_auto",
-    "car_repair": "pickup_auto",
 }
 
 MAX_MATCH_DISTANCE_M = 400.0
