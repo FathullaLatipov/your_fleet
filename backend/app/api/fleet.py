@@ -75,8 +75,26 @@ def _own_vehicle(vehicle_id: uuid.UUID, user: User, db: Session) -> Vehicle:
     return v
 
 
+def vehicle_warnings(v: Vehicle) -> list[str]:
+    """Document warnings in the spirit of carrier TMS exports."""
+    out: list[str] = []
+    now = utcnow()
+    for label, dt in (("Insurance", v.insurance_expires_at),
+                      ("Inspection", v.inspection_expires_at)):
+        if dt is None:
+            out.append(f"No {label.lower()} date on file")
+        elif dt < now:
+            out.append(f"{label} expired {dt.date().isoformat()}")
+        elif (dt - now).days <= 30:
+            out.append(f"{label} expires in {(dt - now).days} days")
+    if not v.vin:
+        out.append("No VIN on file")
+    return out
+
+
 def _vehicle_out(db: Session, v: Vehicle) -> VehicleOut:
     out = VehicleOut.model_validate(v)
+    out.warnings = vehicle_warnings(v)
     schedules = db.execute(
         select(MaintenanceSchedule).where(MaintenanceSchedule.vehicle_id == v.id)
     ).scalars().all()

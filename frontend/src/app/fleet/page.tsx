@@ -24,7 +24,10 @@ export default function FleetPage() {
   const { user, loading } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ unit_number: "", make: "", model: "", year: "", vin: "", odometer: "" });
+  const [form, setForm] = useState({
+    unit_number: "", make: "", model: "", year: "", vin: "", odometer: "",
+    plate: "", state: "", driver: "", ownership: "", mc: "",
+  });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -63,9 +66,15 @@ export default function FleetPage() {
           year: form.year ? Number(form.year) : null,
           vin: form.vin || null,
           odometer_miles: form.odometer ? Number(form.odometer) : null,
+          license_plate: form.plate || null,
+          state: form.state || null,
+          operator_name: form.driver || null,
+          ownership: form.ownership || null,
+          mc_number: form.mc || null,
         },
       });
-      setForm({ unit_number: "", make: "", model: "", year: "", vin: "", odometer: "" });
+      setForm({ unit_number: "", make: "", model: "", year: "", vin: "", odometer: "",
+                plate: "", state: "", driver: "", ownership: "", mc: "" });
       setShowAdd(false);
       load();
     } catch (err) {
@@ -121,6 +130,36 @@ export default function FleetPage() {
             <label className="text-sm font-medium text-steel" htmlFor="fv-odo">Odometer (mi)</label>
             <input id="fv-odo" className="field mt-1" inputMode="numeric" value={form.odometer}
                    onChange={(e) => setForm({ ...form, odometer: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="fv-plate">Plate number</label>
+            <input id="fv-plate" className="field mt-1" value={form.plate}
+                   onChange={(e) => setForm({ ...form, plate: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="fv-state">State</label>
+            <input id="fv-state" className="field mt-1" placeholder="Ohio" value={form.state}
+                   onChange={(e) => setForm({ ...form, state: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="fv-own">Ownership</label>
+            <select id="fv-own" className="field mt-1" value={form.ownership}
+                    onChange={(e) => setForm({ ...form, ownership: e.target.value })}>
+              <option value="">—</option>
+              <option value="Owner">Owner</option>
+              <option value="Owner-operator">Owner-operator</option>
+              <option value="Leased">Leased</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="fv-driver">Operator (driver)</label>
+            <input id="fv-driver" className="field mt-1" value={form.driver}
+                   onChange={(e) => setForm({ ...form, driver: e.target.value })} />
+          </div>
+          <div className="sm:col-span-2">
+            <label className="text-sm font-medium text-steel" htmlFor="fv-mc">MC / carrier</label>
+            <input id="fv-mc" className="field mt-1" placeholder="e.g. VKL TRUCKING INC" value={form.mc}
+                   onChange={(e) => setForm({ ...form, mc: e.target.value })} />
           </div>
           {error && <p className="text-sm font-medium text-danger sm:col-span-3">{error}</p>}
           <div className="sm:col-span-3">

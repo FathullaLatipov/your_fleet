@@ -28,6 +28,146 @@ interface ShopOptions {
   options: BusinessListItem[];
 }
 
+/* Carrier profile fields, modeled after standard TMS truck exports. */
+function TruckDetails({ v, onSaved }: { v: import("@/lib/types").Vehicle; onSaved: () => void }) {
+  const [edit, setEdit] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [f, setF] = useState<Record<string, string>>({});
+
+  function openEdit() {
+    setF({
+      operator_name: v.operator_name ?? "", ownership: v.ownership ?? "",
+      mc_number: v.mc_number ?? "", license_plate: v.license_plate ?? "",
+      state: v.state ?? "", trailer_unit: v.trailer_unit ?? "",
+      dispatch_status: v.dispatch_status ?? "", tags: v.tags ?? "",
+      notes: v.notes ?? "",
+      insurance: v.insurance_expires_at ? v.insurance_expires_at.slice(0, 10) : "",
+      inspection: v.inspection_expires_at ? v.inspection_expires_at.slice(0, 10) : "",
+    });
+    setEdit(true);
+  }
+
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setErr(null);
+    try {
+      await api(`/api/fleet/vehicles/${v.id}`, {
+        method: "PATCH",
+        body: {
+          operator_name: f.operator_name || null,
+          ownership: f.ownership || null,
+          mc_number: f.mc_number || null,
+          license_plate: f.license_plate || null,
+          state: f.state || null,
+          trailer_unit: f.trailer_unit || null,
+          dispatch_status: f.dispatch_status || null,
+          tags: f.tags || null,
+          notes: f.notes || null,
+          insurance_expires_at: f.insurance ? new Date(f.insurance).toISOString() : null,
+          inspection_expires_at: f.inspection ? new Date(f.inspection).toISOString() : null,
+        },
+      });
+      setEdit(false);
+      onSaved();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Save failed");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const rows: [string, string | null][] = [
+    ["Operator (driver)", v.operator_name],
+    ["Ownership", v.ownership],
+    ["MC / carrier", v.mc_number],
+    ["Plate", [v.license_plate, v.state].filter(Boolean).join(" · ") || null],
+    ["Trailer", v.trailer_unit],
+    ["Dispatch status", v.dispatch_status ? v.dispatch_status.replace("_", " ") : null],
+    ["Tags", v.tags],
+    ["Insurance until", v.insurance_expires_at ? new Date(v.insurance_expires_at).toLocaleDateString() : null],
+    ["Inspection until", v.inspection_expires_at ? new Date(v.inspection_expires_at).toLocaleDateString() : null],
+  ];
+
+  return (
+    <section className="card mt-4 p-5">
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-lg font-bold">Truck details</h2>
+        <button className="btn-quiet !py-1.5 text-sm" onClick={() => (edit ? setEdit(false) : openEdit())}>
+          {edit ? "Cancel" : "Edit details"}
+        </button>
+      </div>
+      {!edit ? (
+        <>
+          <dl className="mt-3 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-3">
+            {rows.map(([label, value]) => (
+              <div key={label}>
+                <dt className="text-steel">{label}</dt>
+                <dd className={`font-medium ${value ? "" : "text-faint"}`}>{value ?? "—"}</dd>
+              </div>
+            ))}
+          </dl>
+          {v.notes && <p className="mt-3 rounded-lg bg-mist/70 p-3 text-sm text-steel">{v.notes}</p>}
+        </>
+      ) : (
+        <form onSubmit={save} className="mt-3 grid gap-3 sm:grid-cols-3">
+          {([
+            ["operator_name", "Operator (driver)"], ["mc_number", "MC / carrier"],
+            ["license_plate", "Plate number"], ["state", "State"],
+            ["trailer_unit", "Trailer unit"], ["tags", "Tags"],
+          ] as const).map(([key, label]) => (
+            <div key={key}>
+              <label className="text-sm font-medium text-steel" htmlFor={`td-${key}`}>{label}</label>
+              <input id={`td-${key}`} className="field mt-1" value={f[key] ?? ""}
+                     onChange={(e) => setF({ ...f, [key]: e.target.value })} />
+            </div>
+          ))}
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-own">Ownership</label>
+            <select id="td-own" className="field mt-1" value={f.ownership}
+                    onChange={(e) => setF({ ...f, ownership: e.target.value })}>
+              <option value="">—</option>
+              <option value="Owner">Owner</option>
+              <option value="Owner-operator">Owner-operator</option>
+              <option value="Leased">Leased</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-disp">Dispatch status</label>
+            <select id="td-disp" className="field mt-1" value={f.dispatch_status}
+                    onChange={(e) => setF({ ...f, dispatch_status: e.target.value })}>
+              <option value="">—</option>
+              <option value="available">Available</option>
+              <option value="in_transit">In transit</option>
+              <option value="parked">Parked</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-ins">Insurance until</label>
+            <input id="td-ins" type="date" className="field mt-1" value={f.insurance}
+                   onChange={(e) => setF({ ...f, insurance: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-insp">Inspection until</label>
+            <input id="td-insp" type="date" className="field mt-1" value={f.inspection}
+                   onChange={(e) => setF({ ...f, inspection: e.target.value })} />
+          </div>
+          <div className="sm:col-span-3">
+            <label className="text-sm font-medium text-steel" htmlFor="td-notes">Notes</label>
+            <textarea id="td-notes" className="field mt-1" maxLength={5000} value={f.notes}
+                      onChange={(e) => setF({ ...f, notes: e.target.value })} />
+          </div>
+          {err && <p className="text-sm font-medium text-danger sm:col-span-3">{err}</p>}
+          <div className="sm:col-span-3">
+            <button className="btn" disabled={busy}>{busy ? "Saving…" : "Save details"}</button>
+          </div>
+        </form>
+      )}
+    </section>
+  );
+}
+
 export default function VehiclePage() {
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
@@ -112,6 +252,17 @@ export default function VehiclePage() {
           </>
         )}
       </p>
+
+      {v.warnings.length > 0 && (
+        <div className="mt-4 rounded-xl border border-danger/30 bg-danger-wash p-4">
+          <p className="font-semibold text-danger">Document warnings</p>
+          <ul className="mt-1 list-inside list-disc text-sm text-danger/90">
+            {v.warnings.map((w) => <li key={w}>{w}</li>)}
+          </ul>
+        </div>
+      )}
+
+      <TruckDetails v={v} onSaved={load} />
 
       <div className="mt-6 grid gap-8 lg:grid-cols-2">
         {/* Odometer + maintenance */}

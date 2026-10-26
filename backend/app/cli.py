@@ -122,6 +122,19 @@ def cmd_monday_export(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_import_vehicles(args: argparse.Namespace) -> int:
+    """Import a carrier's fleet from a TMS-style xlsx export (see README)."""
+    from app.services.vehicle_import import import_vehicles_xlsx
+
+    with SessionLocal() as db:
+        owner = _find_user(db, args.owner_email)
+        if owner is None:
+            return 1
+        report = import_vehicles_xlsx(db, owner, args.path, dry_run=args.dry_run)
+    print(json.dumps(report, indent=2))
+    return 0
+
+
 def cmd_check_maintenance(_: argparse.Namespace) -> int:
     from sqlalchemy import select
 
@@ -197,6 +210,13 @@ def main() -> int:
     p_m.add_argument("--column-map", default=None,
                      help='JSON like {"date":"date4","amount":"numbers1","unit":"text1"}')
     p_m.set_defaults(func=cmd_monday_export)
+
+    p_vi = sub.add_parser("import-vehicles",
+                          help="Import a carrier fleet from a TMS xlsx export")
+    p_vi.add_argument("path")
+    p_vi.add_argument("--owner-email", required=True)
+    p_vi.add_argument("--dry-run", action="store_true")
+    p_vi.set_defaults(func=cmd_import_vehicles)
 
     p_chk = sub.add_parser("check-maintenance",
                            help="Send due/overdue maintenance notifications for all vehicles")

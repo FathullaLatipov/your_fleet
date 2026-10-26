@@ -178,6 +178,16 @@ export interface Vehicle {
   model: string | null;
   year: number | null;
   license_plate: string | null;
+  state: string | null;
+  mc_number: string | null;
+  operator_name: string | null;
+  ownership: string | null;
+  trailer_unit: string | null;
+  dispatch_status: string | null;
+  tags: string | null;
+  notes: string | null;
+  insurance_expires_at: string | null;
+  inspection_expires_at: string | null;
   status: "active" | "in_repair" | "inactive";
   odometer_miles: number | null;
   odometer_updated_at: string | null;
@@ -189,6 +199,7 @@ export interface Vehicle {
   maintenance_status: "ok" | "due_soon" | "overdue" | "unknown";
   open_defects: number;
   expenses_total_cents: number;
+  warnings: string[];
 }
 
 export interface Schedule {

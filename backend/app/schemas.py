@@ -343,15 +343,23 @@ class ReviewOut(ORMModel):
 
 # ------------------------------------------------------------------ fleet / TMS
 
-class VehicleIn(BaseModel):
-    unit_number: str = Field(min_length=1, max_length=32)
+class _VehicleFields(BaseModel):
     name: str | None = Field(default=None, max_length=128)
     vin: str | None = Field(default=None, min_length=11, max_length=17)
     make: str | None = Field(default=None, max_length=64)
     model: str | None = Field(default=None, max_length=64)
     year: int | None = Field(default=None, ge=1950, le=2050)
-    license_plate: str | None = Field(default=None, max_length=16)
-    odometer_miles: float | None = Field(default=None, ge=0, le=5_000_000)
+    license_plate: str | None = Field(default=None, max_length=32)
+    state: str | None = Field(default=None, max_length=32)
+    mc_number: str | None = Field(default=None, max_length=64)
+    operator_name: str | None = Field(default=None, max_length=128)
+    ownership: str | None = Field(default=None, max_length=32)
+    trailer_unit: str | None = Field(default=None, max_length=32)
+    dispatch_status: str | None = Field(default=None, max_length=32)
+    tags: str | None = Field(default=None, max_length=255)
+    notes: str | None = Field(default=None, max_length=5000)
+    insurance_expires_at: datetime | None = None
+    inspection_expires_at: datetime | None = None
 
     @field_validator("vin")
     @classmethod
@@ -359,12 +367,12 @@ class VehicleIn(BaseModel):
         return v.strip().upper() if v else None
 
 
-class VehicleUpdateIn(BaseModel):
-    name: str | None = Field(default=None, max_length=128)
-    make: str | None = Field(default=None, max_length=64)
-    model: str | None = Field(default=None, max_length=64)
-    year: int | None = Field(default=None, ge=1950, le=2050)
-    license_plate: str | None = Field(default=None, max_length=16)
+class VehicleIn(_VehicleFields):
+    unit_number: str = Field(min_length=1, max_length=32)
+    odometer_miles: float | None = Field(default=None, ge=0, le=5_000_000)
+
+
+class VehicleUpdateIn(_VehicleFields):
     status: VehicleStatus | None = None
 
 
@@ -381,6 +389,16 @@ class VehicleOut(ORMModel):
     model: str | None
     year: int | None
     license_plate: str | None
+    state: str | None
+    mc_number: str | None
+    operator_name: str | None
+    ownership: str | None
+    trailer_unit: str | None
+    dispatch_status: str | None
+    tags: str | None
+    notes: str | None
+    insurance_expires_at: datetime | None
+    inspection_expires_at: datetime | None
     status: VehicleStatus
     odometer_miles: float | None
     odometer_updated_at: datetime | None
@@ -394,6 +412,7 @@ class VehicleOut(ORMModel):
     maintenance_status: str = "unknown"
     open_defects: int = 0
     expenses_total_cents: int = 0
+    warnings: list[str] = []
 
 
 class ScheduleIn(BaseModel):

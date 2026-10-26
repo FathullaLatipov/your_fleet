@@ -237,7 +237,17 @@ class Vehicle(Base):
     make: Mapped[str | None] = mapped_column(String(64))
     model: Mapped[str | None] = mapped_column(String(64))
     year: Mapped[int | None] = mapped_column(Integer)
-    license_plate: Mapped[str | None] = mapped_column(String(16))
+    license_plate: Mapped[str | None] = mapped_column(String(32))
+    state: Mapped[str | None] = mapped_column(String(32))          # registration state
+    mc_number: Mapped[str | None] = mapped_column(String(64))      # carrier MC / authority
+    operator_name: Mapped[str | None] = mapped_column(String(128)) # assigned driver
+    ownership: Mapped[str | None] = mapped_column(String(32))      # Owner / Owner-operator / Leased
+    trailer_unit: Mapped[str | None] = mapped_column(String(32))   # attached trailer unit #
+    dispatch_status: Mapped[str | None] = mapped_column(String(32))  # available / in_transit / parked
+    tags: Mapped[str | None] = mapped_column(String(255))
+    notes: Mapped[str | None] = mapped_column(Text)
+    insurance_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    inspection_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     status: Mapped[VehicleStatus] = mapped_column(
         str_enum(VehicleStatus), default=VehicleStatus.ACTIVE
     )

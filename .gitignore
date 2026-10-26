@@ -24,3 +24,6 @@ Thumbs.db
 
 # Uploaded media (dev)
 backend/media/
+
+# Carrier data exports - real fleet data, never commit
+*.xlsx
