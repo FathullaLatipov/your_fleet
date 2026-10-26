@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { StatusBadge, Stars, TrustBadges } from "@/components/badges";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { Booking, BusinessListItem, Notification } from "@/lib/types";
+import type { Booking, BusinessListItem, Notification, Vehicle } from "@/lib/types";
 
 const ACTIVE = new Set(["requested", "quoted", "accepted", "confirmed", "in_progress", "disputed"]);
 
@@ -95,12 +95,14 @@ export default function DriverDashboard() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [favorites, setFavorites] = useState<BusinessListItem[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
 
   useEffect(() => {
     if (!user) return;
     api<Booking[]>("/api/bookings/mine").then(setBookings).catch(() => {});
     api<BusinessListItem[]>("/api/me/favorites").then(setFavorites).catch(() => {});
     api<Notification[]>("/api/me/notifications").then(setNotifications).catch(() => {});
+    api<Vehicle[]>("/api/fleet/vehicles").then(setVehicles).catch(() => {});
   }, [user]);
 
   if (loading) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>;
@@ -158,8 +160,9 @@ export default function DriverDashboard() {
       </div>
 
       {/* Stat strip */}
-      <div className="mt-6 grid grid-cols-3 gap-3">
+      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {([
+          ["truck", vehicles.length, "my trucks"],
           ["wrench", active.length, "active requests"],
           ["history", completed.length, "repairs completed"],
           ["bookmark", favorites.length, "saved shops"],
@@ -178,6 +181,70 @@ export default function DriverDashboard() {
 
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_340px]">
         <div className="space-y-6">
+          <section className="card p-5">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="grid h-10 w-10 place-items-center rounded-lg bg-pine-wash text-pine">
+                <Icon name="truck" />
+              </span>
+              <h2 className="text-lg font-bold">My trucks</h2>
+              {vehicles.length > 0 && (
+                <span className="rounded-full bg-mist px-2.5 py-0.5 text-sm font-semibold text-steel">
+                  {vehicles.length}
+                </span>
+              )}
+              <Link href="/fleet" className="btn-quiet ml-auto !py-1.5 text-sm">
+                {vehicles.length > 0 ? "Open fleet" : "+ Add truck"}
+              </Link>
+            </div>
+            <div className="mt-4">
+              {vehicles.length === 0 ? (
+                <EmptyState
+                  icon="truck"
+                  text="Add your truck — VIN, mileage, service intervals — and YourFleet will warn you before maintenance is due and keep every repair cost on one ledger."
+                  actionHref="/fleet"
+                  actionLabel="Add truck"
+                />
+              ) : (
+                <ul className="-mx-3 divide-y divide-line/70">
+                  {vehicles.map((v) => (
+                    <li key={v.id}>
+                      <Link href={`/fleet/${v.id}`}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-3 transition-colors hover:bg-mist">
+                        <div>
+                          <p className="font-semibold">#{v.unit_number}
+                            <span className="ml-2 font-normal text-steel">
+                              {[v.year, v.make, v.model].filter(Boolean).join(" ")}
+                            </span>
+                          </p>
+                          <p className="text-sm text-faint">
+                            {v.odometer_miles != null ? `${Math.round(v.odometer_miles).toLocaleString()} mi` : "No odometer yet"}
+                          </p>
+                        </div>
+                        <span className="flex items-center gap-1.5">
+                          {v.open_defects > 0 && (
+                            <span className="rounded-full bg-danger-wash px-2 py-0.5 text-xs font-bold text-danger">
+                              {v.open_defects} defect{v.open_defects > 1 ? "s" : ""}
+                            </span>
+                          )}
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                            v.maintenance_status === "overdue" ? "bg-danger-wash text-danger"
+                            : v.maintenance_status === "due_soon" ? "bg-amber-wash text-amber-ink"
+                            : v.maintenance_status === "ok" ? "bg-pine-wash text-pine"
+                            : "bg-mist text-faint"
+                          }`}>
+                            {v.maintenance_status === "overdue" ? "Service overdue"
+                             : v.maintenance_status === "due_soon" ? "Service due soon"
+                             : v.maintenance_status === "ok" ? "Maintenance OK" : "No service plan"}
+                          </span>
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </section>
+
           <SectionCard icon="wrench" title="Active requests" count={active.length}>
             {active.length === 0 ? (
               <EmptyState
