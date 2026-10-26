@@ -39,7 +39,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   sources — verify details with the shop before you drive. Marketplace prices
                   apply only to verified partner offers booked through YourFleet.
                 </p>
-                <p>Map data © OpenStreetMap contributors</p>
+                <p>
+                  Map data © OpenStreetMap contributors ·{" "}
+                  <a href="/attributions" className="underline hover:text-white">Image credits</a>
+                </p>
               </div>
             </div>
           </footer>

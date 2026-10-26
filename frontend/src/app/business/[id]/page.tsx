@@ -149,12 +149,8 @@ function BusinessPageInner() {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={mediaUrl(b.photos[0].path)} alt={`${b.name} photo`}
                className="absolute inset-0 h-full w-full object-cover" />
-        ) : b.has_google_photo ? (
-          <ShopImage businessId={b.id} name={b.name} category={b.category}
-                     hasGooglePhoto width={1200} attribution
-                     className="absolute inset-0" />
         ) : (
-          <ShopCover name={b.name} category={b.category} showMonogram={false}
+          <ShopImage name={b.name} category={b.category} attribution
                      className="absolute inset-0" />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal/90 via-charcoal/30 to-transparent" />
@@ -187,11 +183,6 @@ function BusinessPageInner() {
             </span>
           </div>
         </div>
-        {b.photos.length === 0 && !b.has_google_photo && (
-          <p className="absolute right-3 top-3 rounded bg-charcoal/60 px-2 py-0.5 text-[10px] text-white/60">
-            Illustration — no photos yet
-          </p>
-        )}
       </div>
 
       {b.photos.length > 1 && (

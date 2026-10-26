@@ -1,0 +1,27 @@
+{
+  "truck_trailer": [
+    "truckstop.jpg",
+    "semi-white.jpg",
+    "mack-classic.jpg"
+  ],
+  "tire": [
+    "tires-haul.jpg",
+    "truckstop.jpg"
+  ],
+  "towing": [
+    "wrecker.jpg",
+    "truckstop.jpg"
+  ],
+  "mobile_mechanic": [
+    "mechanic-engine.jpg",
+    "semi-white.jpg"
+  ],
+  "pickup_auto": [
+    "mack-classic.jpg",
+    "truckstop.jpg"
+  ],
+  "other": [
+    "truckstop.jpg",
+    "semi-white.jpg"
+  ]
+}
