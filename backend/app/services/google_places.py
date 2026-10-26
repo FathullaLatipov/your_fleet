@@ -31,7 +31,7 @@ SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 FIELD_MASK = (
     "places.id,places.rating,places.userRatingCount,"
     "places.googleMapsUri,places.displayName,places.location,"
-    "places.primaryType,places.primaryTypeDisplayName"
+    "places.primaryType,places.primaryTypeDisplayName,places.photos"
 )
 
 # Google primaryType -> our coarse category, used to sharpen search filters.
@@ -59,6 +59,7 @@ class Candidate:
     maps_uri: str | None
     primary_type: str | None = None        # snake_case key, e.g. tire_shop
     primary_type_label: str | None = None  # display name, e.g. "Tire shop"
+    photo_name: str | None = None          # Places photo resource name
 
 
 SearchFn = Callable[[str, float, float], list[Candidate]]
@@ -145,6 +146,7 @@ def http_search_factory(api_key: str, qps: float = 5.0) -> SearchFn:
                     maps_uri=p.get("googleMapsUri"),
                     primary_type=p.get("primaryType"),
                     primary_type_label=(p.get("primaryTypeDisplayName") or {}).get("text"),
+                    photo_name=((p.get("photos") or [{}])[0] or {}).get("name"),
                 ))
             return out
         raise RuntimeError("Places API kept rate-limiting after retries")
@@ -216,6 +218,7 @@ def enrich_businesses(
             b.google_place_url = match.maps_uri
             if match.primary_type_label:
                 b.google_primary_type = match.primary_type_label[:64]
+            b.google_photo_name = match.photo_name[:512] if match.photo_name else None
             mapped = TYPE_TO_CATEGORY.get(match.primary_type or "")
             if mapped and b.category.value != mapped:
                 b.category = BusinessCategory(mapped)

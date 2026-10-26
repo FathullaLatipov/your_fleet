@@ -137,6 +137,10 @@ class Business(Base):
     # Google's own business type, e.g. "Tire shop", "Towing service" (licensed
     # Places data, refreshed together with the rating).
     google_primary_type: Mapped[str | None] = mapped_column(String(64))
+    # Places photo resource name (an identifier, not the image). The photo
+    # itself is fetched from Google at request time — bytes are never stored,
+    # per the Places photo policy.
+    google_photo_name: Mapped[str | None] = mapped_column(String(512))
     google_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, index=True)

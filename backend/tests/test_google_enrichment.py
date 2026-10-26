@@ -11,7 +11,8 @@ from tests.test_api import make_business  # noqa: F401
 def cand(name, lat, lng, rating=4.6, count=120, pid="pid-1"):
     return Candidate(place_id=pid, name=name, lat=lat, lng=lng,
                      rating=rating, rating_count=count,
-                     maps_uri=f"https://maps.google.com/?cid={pid}")
+                     maps_uri=f"https://maps.google.com/?cid={pid}",
+                     photo_name=f"places/{pid}/photos/ph-1")
 
 
 class TestMatching:
@@ -52,6 +53,7 @@ class TestEnrichJob:
         assert report.matched == 1
         assert b.google_rating == 4.6 and b.google_rating_count == 120
         assert b.google_place_id == "pid-1" and b.google_synced_at is not None
+        assert b.google_photo_name == "places/pid-1/photos/ph-1"
 
     def test_primary_type_stored_and_category_sharpened(self, db):
         from app.models import BusinessCategory

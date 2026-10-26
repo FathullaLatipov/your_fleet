@@ -6,10 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
 import { GoogleRating, Stars, TrustBadges } from "@/components/badges";
-import { ShopCover } from "@/components/ShopCover";
+import { ShopImage } from "@/components/ShopImage";
 import { api } from "@/lib/api";
 import { openStatus } from "@/lib/hours";
-import { CATEGORY_LABELS, fmtUsd, mediaUrl, type SearchResponse } from "@/lib/types";
+import { CATEGORY_LABELS, fmtUsd, type SearchResponse } from "@/lib/types";
 
 const MapView = dynamic(() => import("@/components/MapView"), {
   ssr: false,
@@ -261,20 +261,15 @@ function SearchPageInner() {
                     data-active={b.id === activeId}
                     onMouseEnter={() => setActiveId(b.id)}
                   >
-                    {b.photo_path ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={mediaUrl(b.photo_path)}
-                        alt=""
-                        className="h-[104px] w-[132px] shrink-0 self-center rounded-md object-cover"
-                      />
-                    ) : (
-                      <ShopCover
-                        name={b.name}
-                        category={b.category}
-                        className="h-[104px] w-[132px] shrink-0 self-center rounded-md"
-                      />
-                    )}
+                    <ShopImage
+                      businessId={b.id}
+                      name={b.name}
+                      category={b.category}
+                      photoPath={b.photo_path}
+                      hasGooglePhoto={b.has_google_photo}
+                      width={264}
+                      className="h-[104px] w-[132px] shrink-0 self-center rounded-md"
+                    />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-3">
                         <h3 className="display truncate font-semibold leading-snug">{b.name}</h3>

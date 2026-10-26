@@ -181,6 +181,7 @@ def business_detail(business_id: uuid.UUID, db: Session = Depends(get_db)):
     out = BusinessDetailOut.model_validate(business)
     out.is_claimed = business.owner_user_id is not None
     out.is_verified = business.identity_verified_at is not None
+    out.has_google_photo = business.google_photo_name is not None
     out.offers = [OfferPublicOut.model_validate(o) for o in _active_offers(db, business)]
     photos = db.execute(
         select(BusinessPhoto).where(BusinessPhoto.business_id == business.id)
@@ -232,6 +233,68 @@ def update_business(
                     entity_id=str(business.id), data={"fields": sorted(changed)}))
     db.commit()
     return business_detail(business_id, db)
+
+
+# ---------------------------------------------------------- google place photo
+
+# photoUri responses are valid for a while; cache them in memory so a busy
+# search page doesn't re-bill the Places Photo SKU on every card render.
+_photo_uri_cache: dict[str, tuple[str, float]] = {}
+_PHOTO_URI_TTL = 3600.0
+
+
+@router.get("/businesses/{business_id}/google-photo")
+def google_photo(
+    business_id: uuid.UUID,
+    w: int = Query(default=480, ge=64, le=1600),
+    db: Session = Depends(get_db),
+):
+    """302-redirect to the shop's Google Places photo.
+
+    Only the photo resource NAME is stored; the image is served by Google at
+    request time (bytes are never cached on our side, per the photo policy).
+    The API key stays server-side: we resolve the photoUri with
+    skipHttpRedirect and send the client to the googleusercontent URL.
+    """
+    import time as _time
+
+    import httpx
+
+    from app.config import get_settings as _settings
+
+    business = db.get(Business, business_id)
+    if business is None or not business.google_photo_name:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No Google photo for this business")
+    key = _settings().google_places_api_key
+    if not key:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Google photos not configured")
+
+    cache_key = f"{business.google_photo_name}|{w}"
+    cached = _photo_uri_cache.get(cache_key)
+    now = _time.monotonic()
+    if cached and cached[1] > now:
+        uri = cached[0]
+    else:
+        try:
+            resp = httpx.get(
+                f"https://places.googleapis.com/v1/{business.google_photo_name}/media",
+                params={"maxWidthPx": w, "skipHttpRedirect": "true", "key": key},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            uri = resp.json().get("photoUri")
+        except httpx.HTTPError:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo unavailable")
+        if not uri:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo unavailable")
+        if len(_photo_uri_cache) > 5000:
+            _photo_uri_cache.clear()
+        _photo_uri_cache[cache_key] = (uri, now + _PHOTO_URI_TTL)
+
+    from fastapi.responses import RedirectResponse
+
+    return RedirectResponse(uri, status_code=302,
+                            headers={"Cache-Control": "public, max-age=3600"})
 
 
 # ------------------------------------------------------------------ photos

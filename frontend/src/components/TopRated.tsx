@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
-import { ShopCover } from "@/components/ShopCover";
+import { ShopImage } from "@/components/ShopImage";
 import { GoogleRating, Stars } from "@/components/badges";
 import { api } from "@/lib/api";
-import { mediaUrl, type BusinessListItem, type SearchResponse } from "@/lib/types";
+import { type BusinessListItem, type SearchResponse } from "@/lib/types";
 
 const MIN_REVIEWS = 25; // a 5.0 with 3 reviews must not outrank a 4.9 with thousands
 
@@ -105,12 +105,15 @@ export function TopRated() {
               href={`/business/${b.id}`}
               className="group w-[240px] shrink-0 snap-start overflow-hidden card transition-[border-color,box-shadow] hover:border-pine hover:shadow-[0_2px_12px_rgb(23_82_53/0.14)] sm:w-auto"
             >
-              {b.photo_path ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={mediaUrl(b.photo_path)} alt="" className="h-32 w-full object-cover" />
-              ) : (
-                <ShopCover name={b.name} category={b.category} className="h-32 w-full" />
-              )}
+              <ShopImage
+                businessId={b.id}
+                name={b.name}
+                category={b.category}
+                photoPath={b.photo_path}
+                hasGooglePhoto={b.has_google_photo}
+                width={480}
+                className="h-32 w-full"
+              />
               <div className="p-4">
                 <div className="flex items-start justify-between gap-2">
                   <h3 className="display font-semibold leading-snug group-hover:text-pine">

@@ -7,6 +7,7 @@ import { Suspense, useEffect, useState } from "react";
 
 import { BookingForm } from "@/components/BookingForm";
 import { ShopCover } from "@/components/ShopCover";
+import { ShopImage } from "@/components/ShopImage";
 import { Stars, TrustBadges } from "@/components/badges";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -148,6 +149,10 @@ function BusinessPageInner() {
           // eslint-disable-next-line @next/next/no-img-element
           <img src={mediaUrl(b.photos[0].path)} alt={`${b.name} photo`}
                className="absolute inset-0 h-full w-full object-cover" />
+        ) : b.has_google_photo ? (
+          <ShopImage businessId={b.id} name={b.name} category={b.category}
+                     hasGooglePhoto width={1200} attribution
+                     className="absolute inset-0" />
         ) : (
           <ShopCover name={b.name} category={b.category} showMonogram={false}
                      className="absolute inset-0" />
@@ -182,7 +187,7 @@ function BusinessPageInner() {
             </span>
           </div>
         </div>
-        {b.photos.length === 0 && (
+        {b.photos.length === 0 && !b.has_google_photo && (
           <p className="absolute right-3 top-3 rounded bg-charcoal/60 px-2 py-0.5 text-[10px] text-white/60">
             Illustration — no photos yet
           </p>
