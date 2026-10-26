@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from app.api import admin, auth, bookings, businesses, claims, me, offers, reviews
+from app.api import admin, auth, bookings, businesses, claims, fleet, me, offers, reviews
 from app.config import get_settings
 
 app = FastAPI(
@@ -23,7 +23,7 @@ app.add_middleware(
 )
 
 for router in (auth.router, businesses.router, claims.router, offers.router,
-               bookings.router, reviews.router, me.router, admin.router):
+               bookings.router, reviews.router, me.router, fleet.router, admin.router):
     app.include_router(router)
 
 _media = Path(settings.media_dir)

@@ -213,6 +213,129 @@ class BusinessClaim(Base):
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+# ---------------------------------------------------------------- fleet / TMS
+
+class VehicleStatus(str, enum.Enum):
+    ACTIVE = "active"
+    IN_REPAIR = "in_repair"
+    INACTIVE = "inactive"
+
+
+class Vehicle(Base):
+    """A carrier's truck. Odometer/location come from manual entry or Samsara."""
+
+    __tablename__ = "vehicles"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    unit_number: Mapped[str] = mapped_column(String(32))
+    name: Mapped[str | None] = mapped_column(String(128))
+    vin: Mapped[str | None] = mapped_column(String(17), index=True)
+    make: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(64))
+    year: Mapped[int | None] = mapped_column(Integer)
+    license_plate: Mapped[str | None] = mapped_column(String(16))
+    status: Mapped[VehicleStatus] = mapped_column(
+        str_enum(VehicleStatus), default=VehicleStatus.ACTIVE
+    )
+    odometer_miles: Mapped[float | None] = mapped_column(Float)
+    odometer_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    odometer_source: Mapped[str | None] = mapped_column(String(16))  # manual | samsara
+    samsara_vehicle_id: Mapped[str | None] = mapped_column(String(64), index=True)
+    last_lat: Mapped[float | None] = mapped_column(Float)
+    last_lng: Mapped[float | None] = mapped_column(Float)
+    last_location_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "unit_number", name="uq_vehicle_unit"),
+    )
+
+
+class MaintenanceSchedule(Base):
+    """Recurring service plan (e.g. oil change every 15,000 mi or 6 months)."""
+
+    __tablename__ = "maintenance_schedules"
+
+    id: Mapped[uuid.UUID] = pk()
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    title: Mapped[str] = mapped_column(String(128))
+    service_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("services.id"))
+    interval_miles: Mapped[int | None] = mapped_column(Integer)
+    interval_months: Mapped[int | None] = mapped_column(Integer)
+    last_done_miles: Mapped[float | None] = mapped_column(Float)
+    last_done_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Set when a due/overdue notification was sent; cleared when serviced.
+    notified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        CheckConstraint(
+            "interval_miles IS NOT NULL OR interval_months IS NOT NULL",
+            name="ck_schedule_has_interval",
+        ),
+    )
+
+
+class ExpenseCategory(str, enum.Enum):
+    REPAIR = "repair"
+    PARTS = "parts"
+    OIL_SERVICE = "oil_service"
+    TIRES = "tires"
+    FUEL = "fuel"
+    TOLLS = "tolls"
+    OTHER = "other"
+
+
+class VehicleExpense(Base):
+    """Monday.com-style per-truck cost ledger. Completed marketplace repairs
+    are appended automatically; manual receipts can be added too."""
+
+    __tablename__ = "vehicle_expenses"
+
+    id: Mapped[uuid.UUID] = pk()
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    booking_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("bookings.id"))
+    business_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("businesses.id"))
+    category: Mapped[ExpenseCategory] = mapped_column(
+        str_enum(ExpenseCategory), default=ExpenseCategory.OTHER
+    )
+    description: Mapped[str] = mapped_column(String(255))
+    amount_cents: Mapped[int] = mapped_column(Integer)
+    odometer_miles: Mapped[float | None] = mapped_column(Float)
+    incurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (CheckConstraint("amount_cents >= 0", name="ck_expense_amount"),)
+
+
+class DefectStatus(str, enum.Enum):
+    OPEN = "open"
+    IN_REPAIR = "in_repair"
+    RESOLVED = "resolved"
+
+
+class InspectionDefect(Base):
+    """PTI/DVIR defect: entered manually or pulled from Samsara DVIRs."""
+
+    __tablename__ = "inspection_defects"
+
+    id: Mapped[uuid.UUID] = pk()
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    source: Mapped[str] = mapped_column(String(16), default="manual")  # manual | samsara_dvir
+    samsara_defect_id: Mapped[str | None] = mapped_column(String(64), unique=True)
+    defect_type: Mapped[str] = mapped_column(String(64))  # tires, brakes, lights, engine, ...
+    comment: Mapped[str | None] = mapped_column(Text)
+    severity: Mapped[str | None] = mapped_column(String(16))  # minor | major
+    status: Mapped[DefectStatus] = mapped_column(
+        str_enum(DefectStatus), default=DefectStatus.OPEN, index=True
+    )
+    booking_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("bookings.id"))
+    reported_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 # ---------------------------------------------------------------- import provenance
 
 class ImportBatch(Base):
@@ -370,6 +493,7 @@ class Booking(Base):
     business_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("businesses.id"), index=True)
     driver_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     offer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("offers.id"))
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"), index=True)
     status: Mapped[BookingStatus] = mapped_column(
         str_enum(BookingStatus), default=BookingStatus.REQUESTED, index=True
     )

@@ -71,6 +71,72 @@ def cmd_enrich_google(args: argparse.Namespace) -> int:
     return 0
 
 
+def _find_user(db, email: str):
+    from sqlalchemy import select
+
+    from app.models import User
+
+    user = db.execute(select(User).where(User.email == email.lower())).scalar_one_or_none()
+    if user is None:
+        print(f"No user with email {email}", file=sys.stderr)
+    return user
+
+
+def cmd_sync_samsara(args: argparse.Namespace) -> int:
+    from app.services.samsara import make_client, sync_samsara
+
+    try:
+        sclient = make_client()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    with SessionLocal() as db:
+        owner = _find_user(db, args.owner_email)
+        if owner is None:
+            return 1
+        report = sync_samsara(
+            db, owner,
+            vehicles_fn=sclient.vehicles, stats_fn=sclient.stats,
+            defects_fn=sclient.open_defects,
+            create_missing=args.create_missing,
+        )
+    print(json.dumps(report.as_dict(), indent=2))
+    return 0
+
+
+def cmd_monday_export(args: argparse.Namespace) -> int:
+    from app.services.monday_export import export_expenses, make_gql
+
+    try:
+        gql = make_gql()
+    except RuntimeError as e:
+        print(str(e), file=sys.stderr)
+        return 1
+    column_map = json.loads(args.column_map) if args.column_map else None
+    with SessionLocal() as db:
+        owner = _find_user(db, args.owner_email)
+        if owner is None:
+            return 1
+        report = export_expenses(db, owner, args.board_id, gql, column_map)
+    print(json.dumps(report.as_dict(), indent=2))
+    return 0
+
+
+def cmd_check_maintenance(_: argparse.Namespace) -> int:
+    from sqlalchemy import select
+
+    from app.models import Vehicle
+    from app.services.maintenance import check_vehicle_maintenance
+
+    sent = 0
+    with SessionLocal() as db:
+        for v in db.execute(select(Vehicle)).scalars():
+            sent += check_vehicle_maintenance(db, v)
+        db.commit()
+    print(f"maintenance check: {sent} notifications sent")
+    return 0
+
+
 def cmd_create_admin(args: argparse.Namespace) -> int:
     from app.models import User, UserRole
     from app.security import hash_password
@@ -115,6 +181,26 @@ def main() -> int:
     p_g.add_argument("--qps", type=float, default=5.0, help="Max requests per second")
     p_g.add_argument("--dry-run", action="store_true", help="Fetch and report, persist nothing")
     p_g.set_defaults(func=cmd_enrich_google)
+
+    p_s = sub.add_parser("sync-samsara",
+                         help="Sync vehicles/odometer/DVIR defects (needs SAMSARA_API_TOKEN)")
+    p_s.add_argument("--owner-email", required=True,
+                     help="Fleet account the Samsara org belongs to")
+    p_s.add_argument("--create-missing", action="store_true",
+                     help="Create vehicles that exist in Samsara but not here")
+    p_s.set_defaults(func=cmd_sync_samsara)
+
+    p_m = sub.add_parser("monday-export",
+                         help="Export fleet expenses to a monday.com board (needs MONDAY_API_TOKEN)")
+    p_m.add_argument("--owner-email", required=True)
+    p_m.add_argument("--board-id", required=True)
+    p_m.add_argument("--column-map", default=None,
+                     help='JSON like {"date":"date4","amount":"numbers1","unit":"text1"}')
+    p_m.set_defaults(func=cmd_monday_export)
+
+    p_chk = sub.add_parser("check-maintenance",
+                           help="Send due/overdue maintenance notifications for all vehicles")
+    p_chk.set_defaults(func=cmd_check_maintenance)
 
     p_adm = sub.add_parser("create-admin", help="Create a platform administrator")
     p_adm.add_argument("email")

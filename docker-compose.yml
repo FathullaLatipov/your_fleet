@@ -32,6 +32,8 @@ services:
       JWT_SECRET: ${YF_JWT_SECRET:?set YF_JWT_SECRET in .env}
       CORS_ORIGINS: ${YF_CORS_ORIGINS:-https://your-fleet.vercel.app}
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
+      SAMSARA_API_TOKEN: ${SAMSARA_API_TOKEN:-}
+      MONDAY_API_TOKEN: ${MONDAY_API_TOKEN:-}
       ENVIRONMENT: production
       MEDIA_DIR: /app/media
     ports:

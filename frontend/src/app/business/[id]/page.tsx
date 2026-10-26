@@ -2,8 +2,8 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 
 import { BookingForm } from "@/components/BookingForm";
 import { ShopCover } from "@/components/ShopCover";
@@ -20,8 +20,9 @@ const DAY_LABELS: Record<string, string> = {
   fri: "Friday", sat: "Saturday", sun: "Sunday",
 };
 
-export default function BusinessPage() {
+function BusinessPageInner() {
   const { id } = useParams<{ id: string }>();
+  const qs = useSearchParams();
   const { user } = useAuth();
   const [b, setB] = useState<BusinessDetail | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
@@ -380,6 +381,9 @@ export default function BusinessPage() {
           business={b}
           offerId={bookingOffer}
           onClose={() => setBookingOpen(false)}
+          initialIssue={qs.get("issue") ?? ""}
+          initialVehicleId={qs.get("vehicle")}
+          defectId={qs.get("defect")}
         />
       )}
 
@@ -411,5 +415,13 @@ export default function BusinessPage() {
       {/* Spacer so the fixed bar never covers content on mobile */}
       <div className="h-20 lg:hidden" aria-hidden />
     </div>
+  );
+}
+
+export default function BusinessPage() {
+  return (
+    <Suspense fallback={<p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>}>
+      <BusinessPageInner />
+    </Suspense>
   );
 }

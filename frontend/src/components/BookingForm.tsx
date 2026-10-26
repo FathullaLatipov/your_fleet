@@ -1,22 +1,34 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { api } from "@/lib/api";
-import type { Booking, BusinessDetail } from "@/lib/types";
+import type { Booking, BusinessDetail, Vehicle } from "@/lib/types";
 
 export function BookingForm({
   business,
   offerId,
   onClose,
+  initialIssue = "",
+  initialVehicleId = null,
+  defectId = null,
 }: {
   business: BusinessDetail;
   offerId: string | null;
   onClose: () => void;
+  initialIssue?: string;
+  initialVehicleId?: string | null;
+  defectId?: string | null;
 }) {
   const router = useRouter();
-  const [issue, setIssue] = useState("");
+  const [issue, setIssue] = useState(initialIssue);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [vehicleId, setVehicleId] = useState<string>(initialVehicleId ?? "");
+
+  useEffect(() => {
+    api<Vehicle[]>("/api/fleet/vehicles").then(setVehicles).catch(() => {});
+  }, []);
   const [urgency, setUrgency] = useState<"scheduled" | "emergency">("scheduled");
   const [truckMake, setTruckMake] = useState("");
   const [truckModel, setTruckModel] = useState("");
@@ -43,6 +55,8 @@ export function BookingForm({
         body: {
           business_id: business.id,
           offer_id: offerId,
+          vehicle_id: vehicleId || null,
+          defect_id: vehicleId && vehicleId === (initialVehicleId ?? "") ? defectId : null,
           issue_description: issue,
           urgency,
           truck_info: Object.keys(truck_info).length ? truck_info : null,
@@ -120,6 +134,23 @@ export function BookingForm({
             </p>
           )}
         </fieldset>
+
+        {vehicles.length > 0 && (
+          <div className="mt-4">
+            <label className="text-sm font-medium text-steel" htmlFor="bk-vehicle">
+              Which truck? (links the repair to your fleet records)
+            </label>
+            <select id="bk-vehicle" className="field mt-1" value={vehicleId}
+                    onChange={(e) => setVehicleId(e.target.value)}>
+              <option value="">Not from my fleet list</option>
+              {vehicles.map((veh) => (
+                <option key={veh.id} value={veh.id}>
+                  #{veh.unit_number} {[veh.year, veh.make, veh.model].filter(Boolean).join(" ")}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div className="mt-4 grid grid-cols-3 gap-2">
           <div>

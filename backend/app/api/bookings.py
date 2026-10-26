@@ -11,10 +11,13 @@ from app.models import (
     BookingEvent,
     BookingStatus,
     Business,
+    DefectStatus,
+    InspectionDefect,
     Offer,
     OfferStatus,
     User,
     UserRole,
+    Vehicle,
     utcnow,
 )
 from app.rate_limit import rate_limit
@@ -48,6 +51,19 @@ def create_booking(
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                                 "Offer is not active for this business")
 
+    defect = None
+    if body.vehicle_id is not None:
+        vehicle = db.get(Vehicle, body.vehicle_id)
+        if vehicle is None or vehicle.owner_user_id != user.id:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                "Vehicle not found in your fleet")
+    if body.defect_id is not None:
+        defect = db.get(InspectionDefect, body.defect_id)
+        if (defect is None or body.vehicle_id is None
+                or defect.vehicle_id != body.vehicle_id):
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                                "Defect not found for this vehicle")
+
     # Prevent accidental duplicate submissions: identical open request within 10 min.
     recent = db.execute(
         select(Booking).where(
@@ -61,9 +77,12 @@ def create_booking(
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "An identical request was just submitted")
 
-    booking = Booking(driver_id=user.id, **body.model_dump())
+    booking = Booking(driver_id=user.id, **body.model_dump(exclude={"defect_id"}))
     db.add(booking)
     db.flush()
+    if defect is not None:
+        defect.booking_id = booking.id
+        defect.status = DefectStatus.IN_REPAIR
     db.add(BookingEvent(booking_id=booking.id, actor_id=user.id,
                         from_status=None, to_status=BookingStatus.REQUESTED.value))
     if business.owner_user_id:

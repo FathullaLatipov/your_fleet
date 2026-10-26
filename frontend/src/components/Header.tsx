@@ -26,6 +26,11 @@ export function Header() {
           <Link href="/search" className={pathname === "/search" ? "text-ink" : "hover:text-ink"}>
             Find repair
           </Link>
+          {user && (user.role === "driver" || user.role === "fleet_manager") && (
+            <Link href="/fleet" className={pathname.startsWith("/fleet") ? "text-ink" : "hover:text-ink"}>
+              Fleet
+            </Link>
+          )}
         </nav>
         <div className="ml-auto flex items-center gap-3 text-[15px]">
           {loading ? null : user ? (

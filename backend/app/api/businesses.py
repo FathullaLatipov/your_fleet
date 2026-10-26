@@ -118,6 +118,8 @@ def search(
     radius_miles: float = Query(default=50, ge=1, le=300),
     q: str | None = Query(default=None, max_length=128),
     category: str | None = None,
+    service: str | None = Query(default=None, max_length=64,
+                                description="Service catalog slug, e.g. tires"),
     state: str | None = Query(default=None, max_length=2),
     partner_only: bool = False,
     verified_only: bool = False,
@@ -139,6 +141,7 @@ def search(
             resolved_from_location = {"lat": lat, "lng": lng}
     filters = SearchFilters(
         lat=lat, lng=lng, radius_miles=radius_miles, q=q, category=category,
+        service_slug=service,
         state=state, partner_only=partner_only, verified_only=verified_only,
         has_offer=has_offer, mobile_only=mobile_only, emergency_only=emergency_only,
         min_rating=min_rating, min_reviews=min_reviews, open_now=open_now,

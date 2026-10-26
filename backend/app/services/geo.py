@@ -23,6 +23,7 @@ class SearchFilters:
     radius_miles: float = 50.0
     q: str | None = None
     category: str | None = None
+    service_slug: str | None = None
     state: str | None = None
     city: str | None = None
     zip_code: str | None = None
@@ -58,6 +59,7 @@ SELECT b.id, b.name, b.category, b.city, b.state, b.phone, b.lat, b.lng,
        (SELECT '/media/' || p.filename FROM business_photos p
         WHERE p.business_id = b.id ORDER BY p.sort, p.created_at LIMIT 1
        ) AS photo_path
+       {extra_cols}
        {distance_col}
 FROM businesses b
 WHERE b.is_published = true
@@ -103,6 +105,18 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
     if f.category:
         params["category"] = f.category
         conditions.append("b.category = :category")
+    extra_cols = ", NULL::int AS service_price_cents"
+    if f.service_slug:
+        params["service_slug"] = f.service_slug
+        conditions.append(
+            "EXISTS (SELECT 1 FROM business_services bs JOIN services s ON s.id = bs.service_id"
+            " WHERE bs.business_id = b.id AND s.slug = :service_slug)"
+        )
+        extra_cols = (
+            ", (SELECT min(bs2.standard_price_cents) FROM business_services bs2"
+            "   JOIN services s2 ON s2.id = bs2.service_id"
+            "   WHERE bs2.business_id = b.id AND s2.slug = :service_slug) AS service_price_cents"
+        )
     if f.state:
         params["state"] = f.state.upper()
         conditions.append("b.state = :state")
@@ -150,7 +164,8 @@ def search_businesses(db: Session, f: SearchFilters) -> tuple[list[dict], int]:
         )
 
     cond_sql = "".join(f"  AND {c}\n" for c in conditions)
-    sql = _BASE.format(distance_col=distance_col, conditions=cond_sql, order=order)
+    sql = _BASE.format(distance_col=distance_col, conditions=cond_sql, order=order,
+                       extra_cols=extra_cols)
     rows = [dict(r._mapping) for r in db.execute(text(sql), params)]
 
     count_sql = f"SELECT count(*) FROM businesses b WHERE b.is_published = true\n{cond_sql}"

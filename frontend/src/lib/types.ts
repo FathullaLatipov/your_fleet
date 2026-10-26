@@ -26,6 +26,7 @@ export interface BusinessListItem {
   is_mobile_service: boolean | null;
   accepts_emergency: boolean | null;
   price_from_cents: number | null;
+  service_price_cents: number | null;
   photo_path: string | null;
   hours: Record<string, [string, string][]> | null;
   google_rating: number | null;
@@ -163,6 +164,85 @@ export interface SearchResponse {
 
 export const fmtUsd = (cents: number | null | undefined): string =>
   cents == null ? "—" : `$${(cents / 100).toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+
+// ------------------------------------------------------------------ fleet
+
+export interface Vehicle {
+  id: string;
+  unit_number: string;
+  name: string | null;
+  vin: string | null;
+  make: string | null;
+  model: string | null;
+  year: number | null;
+  license_plate: string | null;
+  status: "active" | "in_repair" | "inactive";
+  odometer_miles: number | null;
+  odometer_updated_at: string | null;
+  odometer_source: string | null;
+  samsara_vehicle_id: string | null;
+  last_lat: number | null;
+  last_lng: number | null;
+  last_location_at: string | null;
+  maintenance_status: "ok" | "due_soon" | "overdue" | "unknown";
+  open_defects: number;
+  expenses_total_cents: number;
+}
+
+export interface Schedule {
+  id: string;
+  title: string;
+  interval_miles: number | null;
+  interval_months: number | null;
+  last_done_miles: number | null;
+  last_done_at: string | null;
+  status: string;
+  miles_left: number | null;
+  days_left: number | null;
+}
+
+export interface Expense {
+  id: string;
+  category: string;
+  description: string;
+  amount_cents: number;
+  odometer_miles: number | null;
+  incurred_at: string;
+  booking_id: string | null;
+  business_id: string | null;
+}
+
+export interface Defect {
+  id: string;
+  vehicle_id: string;
+  source: string;
+  defect_type: string;
+  comment: string | null;
+  severity: string | null;
+  status: "open" | "in_repair" | "resolved";
+  booking_id: string | null;
+  reported_at: string;
+  suggested_service_slug: string | null;
+}
+
+export interface VehicleDetail {
+  vehicle: Vehicle;
+  schedules: Schedule[];
+  expenses: Expense[];
+  expenses_by_category: Record<string, number>;
+  defects: Defect[];
+  bookings: Booking[];
+}
+
+export const EXPENSE_LABELS: Record<string, string> = {
+  repair: "Repair",
+  parts: "Parts",
+  oil_service: "Oil & service",
+  tires: "Tires",
+  fuel: "Fuel",
+  tolls: "Tolls",
+  other: "Other",
+};
 
 export const CATEGORY_LABELS: Record<string, string> = {
   truck_trailer: "Truck & trailer",

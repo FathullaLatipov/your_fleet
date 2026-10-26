@@ -121,6 +121,7 @@ def transition(
         _apply_commission(booking)  # admin resolving a dispute
 
     booking.status = to_status
+    _sync_fleet_side_effects(db, booking, actor, from_status, to_status)
     db.add(BookingEvent(
         booking_id=booking.id, actor_id=actor.id,
         from_status=from_status.value, to_status=to_status.value, note=note,
@@ -138,6 +139,54 @@ def transition(
     except StaleDataError:
         raise ConflictError("Booking was modified concurrently; reload and retry")
     return booking
+
+
+def _sync_fleet_side_effects(db, booking, actor, from_status, to_status) -> None:
+    """Keep the TMS in sync: vehicle status, defect lifecycle, auto-expense."""
+    from app.models import (
+        DefectStatus,
+        ExpenseCategory,
+        InspectionDefect,
+        Vehicle,
+        VehicleExpense,
+        VehicleStatus,
+    )
+    from sqlalchemy import select
+
+    if booking.vehicle_id is None:
+        return
+    vehicle = db.get(Vehicle, booking.vehicle_id)
+    if vehicle is None:
+        return
+    if to_status == S.IN_PROGRESS:
+        vehicle.status = VehicleStatus.IN_REPAIR
+    elif to_status in (S.COMPLETED, S.CANCELLED) and vehicle.status == VehicleStatus.IN_REPAIR:
+        vehicle.status = VehicleStatus.ACTIVE
+
+    defect = db.execute(
+        select(InspectionDefect).where(InspectionDefect.booking_id == booking.id)
+    ).scalar_one_or_none()
+    if defect is not None:
+        if to_status == S.COMPLETED:
+            defect.status = DefectStatus.RESOLVED
+            defect.resolved_at = utcnow()
+        elif to_status == S.CANCELLED and defect.status == DefectStatus.IN_REPAIR:
+            defect.status = DefectStatus.OPEN
+
+    if to_status == S.COMPLETED and booking.final_price_cents is not None:
+        already = db.execute(
+            select(VehicleExpense).where(VehicleExpense.booking_id == booking.id)
+        ).scalar_one_or_none()
+        if already is None:
+            db.add(VehicleExpense(
+                vehicle_id=vehicle.id, booking_id=booking.id,
+                business_id=booking.business_id,
+                category=ExpenseCategory.REPAIR,
+                description=booking.issue_description[:255],
+                amount_cents=booking.final_price_cents,
+                odometer_miles=vehicle.odometer_miles,
+                created_by=actor.id,
+            ))
 
 
 def _apply_commission(booking: Booking) -> None:

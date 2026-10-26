@@ -19,12 +19,15 @@ from app.models import (
     BookingUrgency,
     BusinessCategory,
     ClaimStatus,
+    DefectStatus,
     DuplicateStatus,
+    ExpenseCategory,
     OfferStatus,
     OfferType,
     PartnerStatus,
     ReviewStatus,
     UserRole,
+    VehicleStatus,
 )
 
 
@@ -129,6 +132,7 @@ class BusinessListItem(ORMModel):
     is_mobile_service: bool | None = None
     accepts_emergency: bool | None = None
     price_from_cents: int | None = None
+    service_price_cents: int | None = None
     photo_path: str | None = None
     hours: dict | None = None
     google_rating: float | None = None
@@ -262,6 +266,8 @@ class OfferOut(OfferPublicOut):
 class BookingIn(BaseModel):
     business_id: uuid.UUID
     offer_id: uuid.UUID | None = None
+    vehicle_id: uuid.UUID | None = None
+    defect_id: uuid.UUID | None = None
     issue_description: str = Field(min_length=10, max_length=5000)
     urgency: BookingUrgency = BookingUrgency.SCHEDULED
     truck_info: dict | None = None
@@ -331,6 +337,143 @@ class ReviewOut(ORMModel):
     text: str | None
     status: ReviewStatus
     created_at: datetime
+
+
+# ------------------------------------------------------------------ fleet / TMS
+
+class VehicleIn(BaseModel):
+    unit_number: str = Field(min_length=1, max_length=32)
+    name: str | None = Field(default=None, max_length=128)
+    vin: str | None = Field(default=None, min_length=11, max_length=17)
+    make: str | None = Field(default=None, max_length=64)
+    model: str | None = Field(default=None, max_length=64)
+    year: int | None = Field(default=None, ge=1950, le=2050)
+    license_plate: str | None = Field(default=None, max_length=16)
+    odometer_miles: float | None = Field(default=None, ge=0, le=5_000_000)
+
+    @field_validator("vin")
+    @classmethod
+    def clean_vin(cls, v: str | None) -> str | None:
+        return v.strip().upper() if v else None
+
+
+class VehicleUpdateIn(BaseModel):
+    name: str | None = Field(default=None, max_length=128)
+    make: str | None = Field(default=None, max_length=64)
+    model: str | None = Field(default=None, max_length=64)
+    year: int | None = Field(default=None, ge=1950, le=2050)
+    license_plate: str | None = Field(default=None, max_length=16)
+    status: VehicleStatus | None = None
+
+
+class OdometerIn(BaseModel):
+    odometer_miles: float = Field(ge=0, le=5_000_000)
+
+
+class VehicleOut(ORMModel):
+    id: uuid.UUID
+    unit_number: str
+    name: str | None
+    vin: str | None
+    make: str | None
+    model: str | None
+    year: int | None
+    license_plate: str | None
+    status: VehicleStatus
+    odometer_miles: float | None
+    odometer_updated_at: datetime | None
+    odometer_source: str | None
+    samsara_vehicle_id: str | None
+    last_lat: float | None
+    last_lng: float | None
+    last_location_at: datetime | None
+    created_at: datetime
+    # aggregates filled by the router
+    maintenance_status: str = "unknown"
+    open_defects: int = 0
+    expenses_total_cents: int = 0
+
+
+class ScheduleIn(BaseModel):
+    title: str = Field(min_length=2, max_length=128)
+    service_id: uuid.UUID | None = None
+    interval_miles: int | None = Field(default=None, ge=100, le=1_000_000)
+    interval_months: int | None = Field(default=None, ge=1, le=120)
+    last_done_miles: float | None = Field(default=None, ge=0)
+    last_done_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def needs_interval(self):
+        if self.interval_miles is None and self.interval_months is None:
+            raise ValueError("Set interval_miles, interval_months, or both")
+        return self
+
+
+class ScheduleDoneIn(BaseModel):
+    done_miles: float | None = Field(default=None, ge=0)
+    done_at: datetime | None = None
+
+
+class ScheduleOut(ORMModel):
+    id: uuid.UUID
+    title: str
+    service_id: uuid.UUID | None
+    interval_miles: int | None
+    interval_months: int | None
+    last_done_miles: float | None
+    last_done_at: datetime | None
+    status: str = "unknown"
+    miles_left: float | None = None
+    days_left: float | None = None
+
+
+class ExpenseIn(BaseModel):
+    category: ExpenseCategory = ExpenseCategory.OTHER
+    description: str = Field(min_length=2, max_length=255)
+    amount_cents: int = Field(ge=0, le=100_000_000)
+    odometer_miles: float | None = Field(default=None, ge=0)
+    incurred_at: datetime | None = None
+    business_id: uuid.UUID | None = None
+
+
+class ExpenseOut(ORMModel):
+    id: uuid.UUID
+    category: ExpenseCategory
+    description: str
+    amount_cents: int
+    odometer_miles: float | None
+    incurred_at: datetime
+    booking_id: uuid.UUID | None
+    business_id: uuid.UUID | None
+
+
+class DefectIn(BaseModel):
+    defect_type: str = Field(min_length=2, max_length=64)
+    comment: str | None = Field(default=None, max_length=5000)
+    severity: str | None = Field(default=None, pattern="^(minor|major)$")
+
+
+class DefectOut(ORMModel):
+    id: uuid.UUID
+    vehicle_id: uuid.UUID
+    source: str
+    defect_type: str
+    comment: str | None
+    severity: str | None
+    status: DefectStatus
+    booking_id: uuid.UUID | None
+    reported_at: datetime
+    resolved_at: datetime | None
+    suggested_service_slug: str | None = None
+
+
+class VehicleDetailOut(BaseModel):
+    vehicle: VehicleOut
+    schedules: list[ScheduleOut]
+    expenses: list[ExpenseOut]
+    expenses_by_category: dict[str, int]
+    defects: list[DefectOut]
+    bookings: list["BookingOut"]
 
 
 # ------------------------------------------------------------------ notifications / misc
