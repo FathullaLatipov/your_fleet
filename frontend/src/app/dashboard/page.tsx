@@ -266,36 +266,9 @@ export default function DriverDashboard() {
             )}
           </SectionCard>
 
-          <SectionCard icon="bookmark" title="Saved shops" count={favorites.length}>
-            {favorites.length === 0 ? (
-              <EmptyState
-                icon="bookmark"
-                text="Keep the shops you trust one tap away — hit “Save shop” on any profile."
-                actionHref="/search"
-                actionLabel="Browse shops"
-              />
-            ) : (
-              <ul className="-mx-3 divide-y divide-line/70">
-                {favorites.map((f) => (
-                  <li key={f.id}>
-                    <Link href={`/business/${f.id}`}
-                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-3 transition-colors hover:bg-mist">
-                      <div>
-                        <p className="font-semibold">{f.name}</p>
-                        <p className="text-sm text-steel">{f.city ? `${f.city}, ${f.state}` : f.state}</p>
-                      </div>
-                      <span className="flex items-center gap-2">
-                        <Stars avg={f.rating_avg} count={f.rating_count} />
-                        <TrustBadges b={f} compact />
-                      </span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
         </div>
 
+        <div className="space-y-6">
         <SectionCard icon="bell" title="Notifications" count={unread.length}>
           {notifications.length === 0 ? (
             <EmptyState icon="bell" text="Quotes, confirmations and maintenance alerts will land here." />
@@ -331,6 +304,36 @@ export default function DriverDashboard() {
             </ul>
           )}
         </SectionCard>
+
+        <SectionCard icon="bookmark" title="Saved shops" count={favorites.length}>
+          {favorites.length === 0 ? (
+            <EmptyState
+              icon="bookmark"
+              text="Keep the shops you trust one tap away — hit “Save shop” on any profile."
+              actionHref="/search"
+              actionLabel="Browse shops"
+            />
+          ) : (
+            <ul className="-mx-3 divide-y divide-line/70">
+              {favorites.map((f) => (
+                <li key={f.id}>
+                  <Link href={`/business/${f.id}`}
+                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-3 transition-colors hover:bg-mist">
+                    <div>
+                      <p className="font-semibold">{f.name}</p>
+                      <p className="text-sm text-steel">{f.city ? `${f.city}, ${f.state}` : f.state}</p>
+                    </div>
+                    <span className="flex items-center gap-2">
+                      <Stars avg={f.rating_avg} count={f.rating_count} />
+                      <TrustBadges b={f} compact />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </SectionCard>
+        </div>
       </div>
     </div>
   );
