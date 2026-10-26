@@ -12,9 +12,9 @@
   --color-charcoal-2: #1f2419;
   --color-steel: #4c545e;
   --color-faint: #878f99;
-  --color-mist: #f2f4f3;
+  --color-mist: #f1f3f2;
   --color-panel: #ffffff;
-  --color-line: #dce0e2;
+  --color-line: #dde1e3;
 
   --color-pine: #175235;
   --color-pine-dark: #0f3a24;
@@ -32,12 +32,19 @@
 
   --font-sans: var(--font-inter), "Helvetica Neue", Arial, sans-serif;
   --font-display: var(--font-grotesk), var(--font-inter), sans-serif;
+
+  /* Layered elevation: ambient + key. */
+  --shadow-card: 0 1px 2px rgb(22 24 27 / 0.05), 0 8px 24px -12px rgb(22 24 27 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(22 24 27 / 0.06), 0 16px 32px -12px rgb(23 82 53 / 0.22);
+  --shadow-pop: 0 24px 64px -16px rgb(22 24 27 / 0.45);
+  --shadow-cta: 0 2px 4px rgb(226 99 10 / 0.25), 0 8px 20px -8px rgb(226 99 10 / 0.5);
 }
 
 body {
   background: var(--color-mist);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  text-rendering: optimizeLegibility;
 }
 
 h1, h2, h3, .display {
@@ -50,50 +57,71 @@ h1, h2, h3, .display {
   color: #fff;
 }
 
-/* Controls — inside the components layer so utility classes can override them */
+/* Quiet scrollbars (WebKit) */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--color-steel) 35%, transparent);
+  border-radius: 8px;
+  border: 2px solid var(--color-mist);
+}
+::-webkit-scrollbar-track { background: transparent; }
+
 @layer components {
-.field {
-  @apply w-full rounded-md border border-line bg-panel px-3 py-2 text-[15px] text-ink placeholder:text-faint focus:outline-2 focus:outline-pine focus:outline-offset-0;
-}
-.btn {
-  @apply inline-flex items-center justify-center gap-2 rounded-md bg-cta px-4 py-2 text-[15px] font-bold text-ink transition-colors hover:bg-cta-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine disabled:opacity-50 disabled:pointer-events-none;
-}
-.btn-forest {
-  @apply inline-flex items-center justify-center gap-2 rounded-md bg-pine px-4 py-2 text-[15px] font-semibold text-white transition-colors hover:bg-pine-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine disabled:opacity-50 disabled:pointer-events-none;
-}
-.btn-quiet {
-  @apply inline-flex items-center justify-center gap-2 rounded-md border border-line bg-panel px-4 py-2 text-[15px] font-semibold text-ink transition-colors hover:border-steel focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-pine disabled:opacity-50;
-}
-.btn-danger {
-  @apply inline-flex items-center justify-center gap-2 rounded-md border border-danger/40 bg-panel px-4 py-2 text-[15px] font-semibold text-danger transition-colors hover:bg-danger-wash focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-danger disabled:opacity-50;
+  /* Surfaces */
+  .card {
+    @apply rounded-xl border border-line/70 bg-panel shadow-(--shadow-card);
+  }
+
+  /* Controls */
+  .field {
+    @apply w-full rounded-lg border border-line bg-panel px-3.5 py-2.5 text-[15px] text-ink shadow-[inset_0_1px_2px_rgb(22_24_27/0.03)] placeholder:text-faint transition-[border-color,box-shadow] focus:border-pine focus:outline-none focus:ring-4 focus:ring-pine/15;
+  }
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-cta px-4 py-2.5 text-[15px] font-bold text-ink shadow-(--shadow-cta) transition-[background-color,box-shadow,transform] hover:bg-cta-hover active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cta/30 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-forest {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg bg-pine px-4 py-2.5 text-[15px] font-semibold text-white shadow-[0_2px_4px_rgb(15_58_36/0.2),0_8px_20px_-8px_rgb(15_58_36/0.5)] transition-[background-color,box-shadow,transform] hover:bg-pine-dark active:translate-y-px active:shadow-none focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-pine/25 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .btn-quiet {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-line bg-panel px-4 py-2.5 text-[15px] font-semibold text-ink shadow-[0_1px_2px_rgb(22_24_27/0.05)] transition-[border-color,background-color,transform] hover:border-steel/60 hover:bg-mist active:translate-y-px focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-pine/20 disabled:opacity-50;
+  }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg border border-danger/35 bg-panel px-4 py-2.5 text-[15px] font-semibold text-danger transition-[background-color,transform] hover:bg-danger-wash active:translate-y-px focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-danger/20 disabled:opacity-50;
+  }
+
+  /* Filter chip (search toolbar) */
+  .chip {
+    @apply inline-flex cursor-pointer select-none items-center gap-2 rounded-full border border-line bg-panel px-3.5 py-1.5 text-sm font-medium text-steel shadow-[0_1px_2px_rgb(22_24_27/0.04)] transition-[border-color,background-color,color] hover:border-steel/60 hover:text-ink;
+  }
+  .chip::before {
+    content: "";
+    @apply h-1.5 w-1.5 rounded-full bg-line transition-colors;
+  }
+  .chip[data-on="true"] {
+    @apply border-pine/50 bg-pine-wash text-pine;
+  }
+  .chip[data-on="true"]::before {
+    @apply bg-pine;
+  }
+
+  /* Result card */
+  .shop-card {
+    @apply block rounded-xl border border-line/70 bg-panel p-4 shadow-(--shadow-card) transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-pine/50 hover:shadow-(--shadow-lift);
+  }
+  .shop-card[data-active="true"] {
+    @apply border-pine/60 shadow-(--shadow-lift);
+  }
 }
 
-/* Filter chip (search toolbar) */
-.chip {
-  @apply inline-flex cursor-pointer select-none items-center gap-1.5 rounded-full border border-line bg-panel px-3 py-1.5 text-sm font-medium text-steel transition-colors hover:border-steel;
-}
-.chip[data-on="true"] {
-  @apply border-pine bg-pine-wash text-pine;
-}
-
-/* Result card */
-.shop-card {
-  @apply block rounded-lg border border-line bg-panel p-4 transition-[border-color,box-shadow] hover:border-pine hover:shadow-[0_2px_10px_rgb(23_82_53/0.12)];
-}
-.shop-card[data-active="true"] {
-  @apply border-pine shadow-[0_2px_10px_rgb(23_82_53/0.12)];
-}
-}
-
-/* Map */
+/* Leaflet to match the chrome */
 .leaflet-container {
   font-family: var(--font-sans);
   background: #e8ebe9;
 }
 .leaflet-popup-content-wrapper {
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid var(--color-line);
-  box-shadow: 0 4px 16px rgb(22 24 27 / 0.18);
+  box-shadow: var(--shadow-pop);
 }
 .yf-pin {
   display: grid;
@@ -108,17 +136,9 @@ h1, h2, h3, .display {
   color: #fff;
   font: 700 10px/1 var(--font-sans);
 }
-.yf-pin > span {
-  transform: rotate(45deg);
-}
-.yf-pin--partner {
-  background: var(--color-amber);
-  color: var(--color-ink);
-}
-.yf-pin--offer {
-  background: var(--color-cta);
-  color: var(--color-ink);
-}
+.yf-pin > span { transform: rotate(45deg); }
+.yf-pin--partner { background: var(--color-amber); color: var(--color-ink); }
+.yf-pin--offer { background: var(--color-cta); color: var(--color-ink); }
 .yf-pin--active {
   background: var(--color-pine);
   color: #fff;
@@ -140,12 +160,8 @@ h1, h2, h3, .display {
   from { opacity: 0; transform: translateY(10px); }
   to { opacity: 1; transform: none; }
 }
-.hero-rise {
-  animation: hero-rise 0.5s ease-out both;
-}
-.hero-rise-2 {
-  animation: hero-rise 0.5s ease-out 0.12s both;
-}
+.hero-rise { animation: hero-rise 0.5s ease-out both; }
+.hero-rise-2 { animation: hero-rise 0.5s ease-out 0.12s both; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

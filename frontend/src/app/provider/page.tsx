@@ -57,7 +57,7 @@ export default function ProviderDashboard() {
       <h1 className="text-2xl font-bold">Shop dashboard</h1>
 
       {businesses.length === 0 && (
-        <div className="mt-6 rounded border border-line bg-panel p-6">
+        <div className="mt-6 card p-6">
           <h2 className="text-lg font-bold">Get your shop on YourFleet</h2>
           <p className="mt-1 max-w-[60ch] text-[15px] text-steel">
             Your shop is probably already in our directory. Find it and claim it to manage your
@@ -81,7 +81,7 @@ export default function ProviderDashboard() {
 
       {businesses.length > 0 && (
         <>
-          <div className="mt-6 grid gap-px overflow-hidden rounded border border-line bg-line sm:grid-cols-4">
+          <div className="mt-6 grid gap-px overflow-hidden rounded-xl border border-line/70 bg-line shadow-(--shadow-card) sm:grid-cols-4">
             {[
               ["New leads", String(newLeads.length)],
               ["Open jobs", String(openJobs.length)],
@@ -97,7 +97,7 @@ export default function ProviderDashboard() {
 
           <section className="mt-8">
             <h2 className="text-lg font-bold">My listings</h2>
-            <ul className="mt-2 divide-y divide-line rounded border border-line bg-panel">
+            <ul className="mt-2 divide-y divide-line card">
               {businesses.map((b) => (
                 <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                   <div>
@@ -122,7 +122,7 @@ export default function ProviderDashboard() {
             {newLeads.length === 0 ? (
               <p className="mt-2 text-[15px] text-steel">No new requests right now.</p>
             ) : (
-              <ul className="mt-2 divide-y divide-line rounded border border-line bg-panel">
+              <ul className="mt-2 divide-y divide-line card">
                 {newLeads.map((b) => (
                   <li key={b.id} className="px-4 py-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -145,7 +145,7 @@ export default function ProviderDashboard() {
             {openJobs.length === 0 ? (
               <p className="mt-2 text-[15px] text-steel">No active jobs.</p>
             ) : (
-              <ul className="mt-2 divide-y divide-line rounded border border-line bg-panel">
+              <ul className="mt-2 divide-y divide-line card">
                 {openJobs.map((b) => (
                   <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                     <Link href={`/bookings/${b.id}`} className="font-semibold hover:text-pine hover:underline">
@@ -169,7 +169,7 @@ export default function ProviderDashboard() {
                 profile — they need admin approval and active partner status to go live.
               </p>
             ) : (
-              <ul className="mt-2 divide-y divide-line rounded border border-line bg-panel">
+              <ul className="mt-2 divide-y divide-line card">
                 {offers.map((o) => (
                   <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                     <span className="font-semibold">{o.title}</span>

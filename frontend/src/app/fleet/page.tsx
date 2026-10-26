@@ -91,7 +91,7 @@ export default function FleetPage() {
       </div>
 
       {showAdd && (
-        <form onSubmit={addVehicle} className="mt-5 grid gap-3 rounded-lg border border-line bg-panel p-5 sm:grid-cols-3">
+        <form onSubmit={addVehicle} className="mt-5 grid gap-3 card p-5 sm:grid-cols-3">
           <div>
             <label className="text-sm font-medium text-steel" htmlFor="fv-unit">Unit # *</label>
             <input id="fv-unit" required className="field mt-1" value={form.unit_number}
@@ -132,7 +132,7 @@ export default function FleetPage() {
       {vehicles === null ? (
         <p className="mt-6 text-steel">Loading…</p>
       ) : vehicles.length === 0 ? (
-        <div className="mt-6 rounded-lg border border-line bg-panel p-6">
+        <div className="mt-6 card p-6">
           <p className="font-semibold">No trucks yet.</p>
           <p className="mt-1 text-sm text-steel">
             Add your first truck to track maintenance, PTI defects and repair costs —

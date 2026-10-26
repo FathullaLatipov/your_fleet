@@ -48,7 +48,7 @@ export function HomeSearch() {
   return (
     <form
       onSubmit={searchByText}
-      className="flex flex-col gap-3 rounded-lg border border-white/10 bg-panel p-5 shadow-[0_12px_40px_rgb(0_0_0/0.35)]"
+      className="flex flex-col gap-3 rounded-2xl border border-white/10 bg-panel p-6 shadow-(--shadow-pop)"
       aria-label="Search for truck repair"
     >
       <h2 className="display text-lg font-bold">Where&apos;s the truck?</h2>

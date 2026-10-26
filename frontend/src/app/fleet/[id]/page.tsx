@@ -116,7 +116,7 @@ export default function VehiclePage() {
       <div className="mt-6 grid gap-8 lg:grid-cols-2">
         {/* Odometer + maintenance */}
         <section>
-          <div className="rounded-lg border border-line bg-panel p-5">
+          <div className="card p-5">
             <div className="flex flex-wrap items-end justify-between gap-3">
               <div>
                 <p className="text-sm text-steel">Odometer</p>
@@ -153,7 +153,7 @@ export default function VehiclePage() {
           )}
           <ul className="mt-2 space-y-2">
             {d.schedules.map((s) => (
-              <li key={s.id} className="rounded-lg border border-line bg-panel p-4">
+              <li key={s.id} className="card p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="font-semibold">{s.title}</p>
                   <span className={`rounded px-2 py-0.5 text-xs font-semibold ${SCHED_CLS[s.status]}`}>
@@ -213,7 +213,7 @@ export default function VehiclePage() {
             {d.defects.map((def) => {
               const opt = options[def.id];
               return (
-                <li key={def.id} className="rounded-lg border border-line bg-panel p-4">
+                <li key={def.id} className="card p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-semibold">{def.defect_type}</p>
                     <StatusBadge status={def.status} />
@@ -294,7 +294,7 @@ export default function VehiclePage() {
           {d.bookings.length === 0 ? (
             <p className="mt-1 text-sm text-steel">No marketplace repairs for this truck yet.</p>
           ) : (
-            <ul className="mt-2 divide-y divide-line rounded-lg border border-line bg-panel">
+            <ul className="mt-2 divide-y divide-line card">
               {d.bookings.map((b) => (
                 <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
                   <Link href={`/bookings/${b.id}`} className="text-sm font-medium hover:text-pine hover:underline">

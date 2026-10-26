@@ -84,7 +84,7 @@ export default function AdminPage() {
       {error && <p className="mt-2 text-sm font-medium text-danger">{error}</p>}
 
       {stats && (
-        <div className="mt-5 grid gap-px overflow-hidden rounded border border-line bg-line grid-cols-2 sm:grid-cols-5">
+        <div className="mt-5 grid gap-px overflow-hidden rounded-xl border border-line/70 bg-line shadow-(--shadow-card) grid-cols-2 sm:grid-cols-5">
           {([
             ["Listings", stats.businesses], ["Published", stats.published],
             ["Claimed", stats.claimed], ["Partners", stats.partners], ["Users", stats.users],
@@ -106,7 +106,7 @@ export default function AdminPage() {
           {claims.length === 0 ? <p className="mt-2 text-sm text-steel">Queue is empty.</p> : (
             <ul className="mt-2 space-y-2">
               {claims.map((c) => (
-                <li key={c.id} className="rounded border border-line bg-panel p-4">
+                <li key={c.id} className="card p-4">
                   <p className="text-sm">
                     <Link href={`/business/${c.business_id}`} className="font-semibold text-pine hover:underline">
                       View business
@@ -136,7 +136,7 @@ export default function AdminPage() {
           {offers.length === 0 ? <p className="mt-2 text-sm text-steel">Queue is empty.</p> : (
             <ul className="mt-2 space-y-2">
               {offers.map((o) => (
-                <li key={o.id} className="rounded border border-line bg-panel p-4">
+                <li key={o.id} className="card p-4">
                   <p className="font-semibold">{o.title}</p>
                   <p className="text-sm text-steel">
                     {o.offer_type} · {o.marketplace_price_cents != null && `marketplace ${fmtUsd(o.marketplace_price_cents)} `}
@@ -160,7 +160,7 @@ export default function AdminPage() {
             Merge keeps the first listing and unpublishes the second; nothing is deleted.
           </p>
           {dups.length === 0 ? <p className="mt-2 text-sm text-steel">Queue is empty.</p> : (
-            <ul className="mt-2 divide-y divide-line rounded border border-line bg-panel">
+            <ul className="mt-2 divide-y divide-line card">
               {dups.slice(0, 20).map((d) => (
                 <li key={d.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm">
                   <span>
@@ -190,7 +190,7 @@ export default function AdminPage() {
           ) : (
             <>
               {disputes.map((b) => (
-                <div key={b.id} className="mt-2 flex items-center justify-between rounded border border-line bg-panel px-4 py-2.5 text-sm">
+                <div key={b.id} className="mt-2 flex items-center justify-between card px-4 py-2.5 text-sm">
                   <Link href={`/bookings/${b.id}`} className="font-medium text-pine hover:underline">
                     Disputed booking — {fmtUsd(b.final_price_cents ?? b.quoted_price_cents)}
                   </Link>
@@ -198,7 +198,7 @@ export default function AdminPage() {
                 </div>
               ))}
               {reported.map((r) => (
-                <div key={r.id} className="mt-2 rounded border border-line bg-panel px-4 py-2.5 text-sm">
+                <div key={r.id} className="mt-2 card px-4 py-2.5 text-sm">
                   <p><span className="font-semibold">{r.rating}★ review reported.</span> {r.text}</p>
                   <div className="mt-1.5 flex gap-2">
                     <button className="btn-quiet !py-0.5 !px-2 text-xs" onClick={() => moderate(r.id, "restore")}>Restore</button>
@@ -213,7 +213,7 @@ export default function AdminPage() {
         <section>
           <h2 className="text-lg font-bold">Commission settings</h2>
           {commission && (
-            <form onSubmit={saveCommission} className="mt-2 flex flex-wrap items-end gap-3 rounded border border-line bg-panel p-4">
+            <form onSubmit={saveCommission} className="mt-2 flex flex-wrap items-end gap-3 card p-4">
               <div>
                 <label className="text-sm font-medium text-steel" htmlFor="cm-model">Model</label>
                 <select id="cm-model" className="field mt-1 !w-44" value={commission.model}
@@ -240,7 +240,7 @@ export default function AdminPage() {
         <section>
           <h2 className="text-lg font-bold">Import history</h2>
           {imports.length === 0 ? <p className="mt-2 text-sm text-steel">No imports recorded.</p> : (
-            <ul className="mt-2 divide-y divide-line rounded border border-line bg-panel text-sm">
+            <ul className="mt-2 divide-y divide-line card text-sm">
               {imports.map((b) => {
                 const r = (b.report ?? {}) as Record<string, number>;
                 return (

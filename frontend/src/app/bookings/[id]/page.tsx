@@ -167,7 +167,7 @@ export default function BookingPage() {
         </p>
       )}
 
-      <div className="mt-6 rounded border border-line bg-panel p-5">
+      <div className="mt-6 card p-5">
         <h2 className="font-bold">Issue</h2>
         <p className="mt-1 whitespace-pre-line text-[15px]">{booking.issue_description}</p>
         <dl className="mt-4 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
@@ -226,7 +226,7 @@ export default function BookingPage() {
       </div>
 
       {actions.length > 0 && (
-        <div className="mt-5 rounded border border-line bg-panel p-5">
+        <div className="mt-5 card p-5">
           <h2 className="font-bold">Actions</h2>
           {needsPriceInput && (
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -259,7 +259,7 @@ export default function BookingPage() {
       )}
 
       {kind === "driver" && booking.status === "completed" && !reviewDone && (
-        <div className="mt-5 rounded border border-line bg-panel p-5">
+        <div className="mt-5 card p-5">
           <h2 className="font-bold">How did it go?</h2>
           {reviewOpen ? (
             <form onSubmit={submitReview} className="mt-3 space-y-3">

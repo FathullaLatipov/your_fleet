@@ -94,7 +94,7 @@ export function TopRated() {
       {items === null ? (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4" aria-hidden>
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-56 animate-pulse rounded-lg border border-line bg-panel" />
+            <div key={i} className="h-56 animate-pulse card" />
           ))}
         </div>
       ) : (
@@ -103,7 +103,7 @@ export function TopRated() {
             <Link
               key={b.id}
               href={`/business/${b.id}`}
-              className="group w-[240px] shrink-0 snap-start overflow-hidden rounded-lg border border-line bg-panel transition-[border-color,box-shadow] hover:border-pine hover:shadow-[0_2px_12px_rgb(23_82_53/0.14)] sm:w-auto"
+              className="group w-[240px] shrink-0 snap-start overflow-hidden card transition-[border-color,box-shadow] hover:border-pine hover:shadow-[0_2px_12px_rgb(23_82_53/0.14)] sm:w-auto"
             >
               {b.photo_path ? (
                 // eslint-disable-next-line @next/next/no-img-element

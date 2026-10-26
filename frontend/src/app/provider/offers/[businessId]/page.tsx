@@ -78,13 +78,13 @@ export default function ProviderOffersPage() {
       <h1 className="text-2xl font-bold">Marketplace offers</h1>
       {business && <p className="mt-1 text-steel">{business.name}</p>}
       {business && business.partner_status !== "active" && (
-        <p className="mt-3 rounded border border-line bg-mist p-3 text-sm text-steel">
+        <p className="mt-3 rounded-xl border border-line bg-mist p-3 text-sm text-steel">
           Offers only appear publicly once your shop is an <strong>active marketplace partner</strong>.
           Submit offers now; they go live after partner activation and admin approval.
         </p>
       )}
 
-      <section className="mt-6 rounded border border-line bg-panel p-5">
+      <section className="mt-6 card p-5">
         <h2 className="font-bold">New offer</h2>
         <form onSubmit={submit} className="mt-3 space-y-3">
           <div>
@@ -147,7 +147,7 @@ export default function ProviderOffersPage() {
         {offers.length === 0 ? (
           <p className="mt-2 text-[15px] text-steel">None yet.</p>
         ) : (
-          <ul className="mt-2 divide-y divide-line rounded border border-line bg-panel">
+          <ul className="mt-2 divide-y divide-line card">
             {offers.map((o) => (
               <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                 <div>

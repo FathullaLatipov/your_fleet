@@ -77,7 +77,7 @@ export default function HomePage() {
             ["Compare real prices", "Partner shops publish negotiated marketplace prices. Savings are shown only against a documented regular price — never invented."],
             ["Book and roll", "Send a repair or quote request. The shop answers with a price and time; you confirm. You pay the shop directly, no middleman on the money."],
           ].map(([title, body], i) => (
-            <li key={title} className="rounded-lg border border-line bg-panel p-6">
+            <li key={title} className="card p-6">
               <span className="inline-grid h-12 w-12 place-items-center rounded-md bg-pine-wash text-pine">
                 {STEP_ICONS[i]}
               </span>
@@ -105,7 +105,7 @@ export default function HomePage() {
             <Link
               key={c.slug}
               href={`/search?category=${c.slug}`}
-              className="group rounded-lg border border-line bg-panel p-5 transition-[border-color,box-shadow] hover:border-pine hover:shadow-[0_2px_10px_rgb(23_82_53/0.12)]"
+              className="group card p-5 transition-[border-color,box-shadow] hover:border-pine hover:shadow-[0_2px_10px_rgb(23_82_53/0.12)]"
             >
               <h3 className="font-semibold group-hover:text-pine">{c.name}</h3>
               <p className="mt-1 text-sm text-steel">{c.blurb}</p>

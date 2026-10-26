@@ -65,7 +65,7 @@ function ClaimInner() {
     <div className="mx-auto max-w-xl px-4 py-10">
       <h1 className="text-2xl font-bold">Claim this business</h1>
       {business && (
-        <div className="mt-3 rounded border border-line bg-panel p-4">
+        <div className="mt-3 card p-4">
           <p className="font-semibold">{business.name}</p>
           <p className="text-sm text-steel">{business.address_raw}</p>
           {business.phone && <p className="text-sm text-steel">{business.phone}</p>}

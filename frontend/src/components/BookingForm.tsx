@@ -74,7 +74,7 @@ export function BookingForm({
 
   return (
     <div
-      className="fixed inset-0 z-[1000] flex items-end justify-center bg-ink/50 p-0 sm:items-center sm:p-6"
+      className="fixed inset-0 z-[1200] flex items-end justify-center bg-ink/50 p-0 sm:items-center sm:p-6"
       role="dialog"
       aria-modal="true"
       aria-label={`Request repair at ${business.name}`}
@@ -82,7 +82,7 @@ export function BookingForm({
     >
       <form
         onSubmit={submit}
-        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t border border-line bg-panel p-6 sm:rounded"
+        className="max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-line bg-panel p-6 shadow-(--shadow-pop) sm:rounded-2xl"
       >
         <div className="flex items-start justify-between gap-4">
           <div>

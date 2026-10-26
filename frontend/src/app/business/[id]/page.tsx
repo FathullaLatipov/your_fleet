@@ -146,7 +146,7 @@ function BusinessPageInner() {
         <div className="space-y-8">
           {/* Offers — amber is reserved for this block */}
           {b.offers.length > 0 && (
-            <section id="offers" className="rounded border border-amber/60 bg-amber-wash p-5 scroll-mt-20">
+            <section id="offers" className="rounded-xl border border-amber/60 bg-amber-wash shadow-(--shadow-card) p-5 scroll-mt-20">
               <h2 className="text-xl font-bold text-amber-ink">Verified partner offers</h2>
               <p className="mt-1 text-sm text-amber-ink/80">
                 Negotiated with this shop under a marketplace agreement. Final invoice may add
@@ -160,7 +160,7 @@ function BusinessPageInner() {
                       ? Math.round((o.savings_cents / o.standard_price_cents) * 100)
                       : null;
                   return (
-                    <li key={o.id} className="rounded-lg border border-amber/40 bg-panel p-4">
+                    <li key={o.id} className="rounded-xl border border-amber/40 bg-panel shadow-(--shadow-card) p-4">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <h3 className="display font-semibold">{o.title}</h3>
                         {pct != null && (
@@ -227,7 +227,7 @@ function BusinessPageInner() {
                 Service list not provided yet. Call the shop to confirm what they handle.
               </p>
             ) : (
-              <ul className="mt-3 divide-y divide-line rounded border border-line bg-panel">
+              <ul className="mt-3 divide-y divide-line card">
                 {b.services.map((s) => (
                   <li key={s.id} className="flex items-baseline justify-between gap-4 px-4 py-2.5">
                     <span className="font-medium">{s.service.name}</span>
@@ -267,7 +267,7 @@ function BusinessPageInner() {
             ) : (
               <ul className="mt-3 space-y-3">
                 {reviews.map((r) => (
-                  <li key={r.id} className="rounded border border-line bg-panel p-4">
+                  <li key={r.id} className="card p-4">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-amber-ink">{r.rating}★</span>
                       <span className="text-xs text-faint">{new Date(r.created_at).toLocaleDateString()}</span>
@@ -291,7 +291,7 @@ function BusinessPageInner() {
           >
             <LocationMap lat={b.lat} lng={b.lng} />
           </a>
-          <div className="rounded border border-line bg-panel p-5">
+          <div className="card p-5">
             <h2 className="font-bold">Request a repair</h2>
             <p className="mt-1 text-sm text-steel">
               Describe the problem; the shop replies with a price and time. Booking through
@@ -310,7 +310,7 @@ function BusinessPageInner() {
             )}
           </div>
 
-          <div className="rounded border border-line bg-panel p-5">
+          <div className="card p-5">
             <h2 className="font-bold">Hours</h2>
             {b.hours ? (
               <table className="mt-2 w-full text-sm">
@@ -355,7 +355,7 @@ function BusinessPageInner() {
           </div>
 
           {!b.is_claimed && (
-            <div className="rounded border border-line bg-mist p-5 text-sm text-steel">
+            <div className="rounded-xl border border-line bg-mist p-5 text-sm text-steel">
             <p className="font-semibold text-ink">Is this your shop?</p>
               <p className="mt-1">
                 Claim this listing to manage your details, publish offers, and receive booking
