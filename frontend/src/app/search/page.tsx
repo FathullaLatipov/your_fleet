@@ -292,7 +292,7 @@ function SearchPageInner() {
                         ) : (
                           <Stars avg={null} count={0} />
                         )}
-                        <span>{CATEGORY_LABELS[b.category] ?? b.category}</span>
+                        <span>{b.google_primary_type ?? CATEGORY_LABELS[b.category] ?? b.category}</span>
                         {b.city && <span>{b.city}, {b.state}</span>}
                       </div>
                       <p

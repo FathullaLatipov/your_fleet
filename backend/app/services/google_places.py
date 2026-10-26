@@ -25,13 +25,25 @@ from sqlalchemy.orm import Session
 
 from app.config import get_settings
 from app.importer.normalize import haversine_m, normalize_name
-from app.models import Business, utcnow
+from app.models import Business, BusinessCategory, utcnow
 
 SEARCH_URL = "https://places.googleapis.com/v1/places:searchText"
 FIELD_MASK = (
     "places.id,places.rating,places.userRatingCount,"
-    "places.googleMapsUri,places.displayName,places.location"
+    "places.googleMapsUri,places.displayName,places.location,"
+    "places.primaryType,places.primaryTypeDisplayName"
 )
+
+# Google primaryType -> our coarse category, used to sharpen search filters.
+# Only types we're confident about; anything else leaves the category as-is.
+TYPE_TO_CATEGORY = {
+    "tire_shop": "tire",
+    "towing_service": "towing",
+    "truck_repair_shop": "truck_trailer",
+    "trailer_repair_shop": "truck_trailer",
+    "auto_repair_shop": "pickup_auto",
+    "car_repair": "pickup_auto",
+}
 
 MAX_MATCH_DISTANCE_M = 400.0
 MIN_NAME_SIMILARITY = 0.45
@@ -46,6 +58,8 @@ class Candidate:
     rating: float | None
     rating_count: int | None
     maps_uri: str | None
+    primary_type: str | None = None        # snake_case key, e.g. tire_shop
+    primary_type_label: str | None = None  # display name, e.g. "Tire shop"
 
 
 SearchFn = Callable[[str, float, float], list[Candidate]]
@@ -104,6 +118,7 @@ def http_search_factory(api_key: str, qps: float = 5.0) -> SearchFn:
                 json={
                     "textQuery": text_query,
                     "pageSize": 5,
+                    "languageCode": "en",
                     "locationBias": {
                         "circle": {
                             "center": {"latitude": lat, "longitude": lng},
@@ -129,6 +144,8 @@ def http_search_factory(api_key: str, qps: float = 5.0) -> SearchFn:
                     rating=p.get("rating"),
                     rating_count=p.get("userRatingCount"),
                     maps_uri=p.get("googleMapsUri"),
+                    primary_type=p.get("primaryType"),
+                    primary_type_label=(p.get("primaryTypeDisplayName") or {}).get("text"),
                 ))
             return out
         raise RuntimeError("Places API kept rate-limiting after retries")
@@ -198,6 +215,11 @@ def enrich_businesses(
             b.google_rating = match.rating
             b.google_rating_count = match.rating_count
             b.google_place_url = match.maps_uri
+            if match.primary_type_label:
+                b.google_primary_type = match.primary_type_label[:64]
+            mapped = TYPE_TO_CATEGORY.get(match.primary_type or "")
+            if mapped and b.category.value != mapped:
+                b.category = BusinessCategory(mapped)
             report.matched += 1
         else:
             report.no_match += 1

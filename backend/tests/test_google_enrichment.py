@@ -53,6 +53,30 @@ class TestEnrichJob:
         assert b.google_rating == 4.6 and b.google_rating_count == 120
         assert b.google_place_id == "pid-1" and b.google_synced_at is not None
 
+    def test_primary_type_stored_and_category_sharpened(self, db):
+        from app.models import BusinessCategory
+
+        b = make_business(db, "Type Shop", lat=30.0, lng=-95.0)  # imported as truck_trailer
+        enrich_businesses(db, lambda q, lat, lng: [Candidate(
+            place_id="pt-1", name="Type Shop", lat=30.0001, lng=-95.0001,
+            rating=4.2, rating_count=50, maps_uri=None,
+            primary_type="tire_shop", primary_type_label="Tire shop")])
+        db.refresh(b)
+        assert b.google_primary_type == "Tire shop"
+        assert b.category == BusinessCategory.TIRE
+
+    def test_unknown_type_keeps_category(self, db):
+        from app.models import BusinessCategory
+
+        b = make_business(db, "Dealer Shop", lat=31.0, lng=-95.0)
+        enrich_businesses(db, lambda q, lat, lng: [Candidate(
+            place_id="pt-2", name="Dealer Shop", lat=31.0001, lng=-95.0001,
+            rating=4.0, rating_count=10, maps_uri=None,
+            primary_type="car_dealer", primary_type_label="Car dealer")])
+        db.refresh(b)
+        assert b.google_primary_type == "Car dealer"
+        assert b.category == BusinessCategory.TRUCK_TRAILER
+
     def test_no_match_stamps_but_leaves_fields_empty(self, db):
         b = make_business(db, "Lonely Shop")
         report = enrich_businesses(db, lambda q, lat, lng: [])

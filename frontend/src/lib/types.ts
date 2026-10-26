@@ -31,6 +31,7 @@ export interface BusinessListItem {
   hours: Record<string, [string, string][]> | null;
   google_rating: number | null;
   google_rating_count: number | null;
+  google_primary_type: string | null;
   distance_miles: number | null;
 }
 
@@ -87,6 +88,7 @@ export interface BusinessDetail {
   google_rating: number | null;
   google_rating_count: number | null;
   google_place_url: string | null;
+  google_primary_type: string | null;
   is_claimed: boolean;
   is_verified: boolean;
   services: BusinessService[];

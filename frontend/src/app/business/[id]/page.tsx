@@ -146,7 +146,7 @@ function BusinessPageInner() {
         <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white backdrop-blur">
-              {CATEGORY_LABELS[b.category] ?? b.category}
+              {b.google_primary_type ?? CATEGORY_LABELS[b.category] ?? b.category}
             </span>
             <TrustBadges b={{ ...b, has_active_offer: b.offers.length > 0 }} compact />
             {maxSavePct != null && (
@@ -293,7 +293,13 @@ function BusinessPageInner() {
             {b.services.length === 0 ? (
               <div className="rounded-lg border border-dashed border-line bg-mist/60 px-4 py-6 text-center">
                 <p className="text-sm text-steel">
-                  Service list not provided yet — call the shop to confirm what they handle.
+                  {b.google_primary_type ? (
+                    <>Listed on Google as <strong className="text-ink">{b.google_primary_type}</strong>.
+                      A detailed service list appears once the owner claims this listing —
+                      call to confirm specifics.</>
+                  ) : (
+                    "Service list not provided yet — call the shop to confirm what they handle."
+                  )}
                 </p>
                 {b.phone && (
                   <a href={`tel:${b.phone}`} className="btn-quiet mt-3 !py-2 text-sm">Call the shop</a>
@@ -318,7 +324,7 @@ function BusinessPageInner() {
               <p className="whitespace-pre-line text-[15px] leading-relaxed text-steel">{b.description}</p>
             ) : (
               <p className="text-[15px] leading-relaxed text-steel">
-                {CATEGORY_LABELS[b.category] ?? "Service"} shop
+                {b.google_primary_type ?? `${CATEGORY_LABELS[b.category] ?? "Service"} shop`}
                 {b.city ? ` in ${b.city}, ${b.state}` : b.state ? ` in ${b.state}` : ""}, listed in
                 the YourFleet directory from our operator-curated shop map.
                 {b.is_claimed

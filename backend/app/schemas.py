@@ -137,6 +137,7 @@ class BusinessListItem(ORMModel):
     hours: dict | None = None
     google_rating: float | None = None
     google_rating_count: int | None = None
+    google_primary_type: str | None = None
     distance_miles: float | None = None
 
 
@@ -162,6 +163,7 @@ class BusinessDetailOut(ORMModel):
     google_rating: float | None = None
     google_rating_count: int | None = None
     google_place_url: str | None = None
+    google_primary_type: str | None = None
     is_claimed: bool = False
     is_verified: bool = False
     services: list[BusinessServiceOut] = []
