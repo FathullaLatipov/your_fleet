@@ -20,6 +20,68 @@ const DAY_LABELS: Record<string, string> = {
   fri: "Friday", sat: "Saturday", sun: "Sunday",
 };
 
+const Icons = {
+  wrench: (
+    <path d="M14.5 6.5a4 4 0 0 1 5-3.9l-2.8 2.8 2 2 2.8-2.8a4 4 0 0 1-5.2 4.9L8 17.8A2.1 2.1 0 1 1 5 14.9l7.6-7.6a4 4 0 0 1 1.9-.8Z" />
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 10.5V17M12 7.2v.2" strokeLinecap="round" />
+    </>
+  ),
+  star: (
+    <path d="m12 3.5 2.5 5.3 5.8.7-4.3 4 1.1 5.7L12 16.4l-5.1 2.8 1.1-5.7-4.3-4 5.8-.7L12 3.5Z" />
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.5 2" strokeLinecap="round" />
+    </>
+  ),
+  tag: (
+    <>
+      <path d="M3.5 12.5 11 20l9-9V4h-7l-9.5 8.5Z" strokeLinejoin="round" />
+      <circle cx="15.5" cy="8.5" r="1.4" fill="currentColor" stroke="none" />
+    </>
+  ),
+};
+
+function Icon({ name, className = "h-5 w-5" }: { name: keyof typeof Icons; className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor"
+         strokeWidth="1.7" strokeLinejoin="round" aria-hidden>
+      {Icons[name]}
+    </svg>
+  );
+}
+
+function SectionCard({
+  icon, title, tone = "pine", children, right,
+}: {
+  icon: keyof typeof Icons;
+  title: string;
+  tone?: "pine" | "amber";
+  children: React.ReactNode;
+  right?: React.ReactNode;
+}) {
+  return (
+    <section className="card p-5">
+      <div className="flex flex-wrap items-center gap-3">
+        <span className={`grid h-10 w-10 place-items-center rounded-lg ${
+          tone === "amber" ? "bg-amber-wash text-amber-ink" : "bg-pine-wash text-pine"}`}>
+          <Icon name={icon} />
+        </span>
+        <h2 className="text-lg font-bold">{title}</h2>
+        {right && <span className="ml-auto">{right}</span>}
+      </div>
+      <div className="mt-4">{children}</div>
+    </section>
+  );
+}
+
+const cleanAddress = (a: string) => a.replace(/,?\s*(США|USA|United States)\s*$/i, "");
+
 function BusinessPageInner() {
   const { id } = useParams<{ id: string }>();
   const qs = useSearchParams();
@@ -66,89 +128,99 @@ function BusinessPageInner() {
     .filter((o) => o.savings_cents != null && o.standard_price_cents)
     .map((o) => Math.round((o.savings_cents! / o.standard_price_cents!) * 100));
   const maxSavePct = savePcts.length ? Math.max(...savePcts) : null;
+  const address = b.address_raw ? cleanAddress(b.address_raw) : null;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
-      {/* Gallery */}
-      {b.photos.length > 0 ? (
-        <div className="grid h-60 gap-1.5 overflow-hidden rounded-lg sm:h-72 sm:grid-cols-[2fr_1fr]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={mediaUrl(b.photos[0].path)} alt={b.photos[0].caption ?? `${b.name} photo`}
-               className="h-full w-full object-cover" />
-          {b.photos.length > 1 && (
-            <div className="hidden grid-rows-2 gap-1.5 sm:grid">
-              {b.photos.slice(1, 3).map((p) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={p.id} src={mediaUrl(p.path)} alt={p.caption ?? `${b.name} photo`}
-                     className="h-full w-full object-cover" />
-              ))}
-            </div>
-          )}
-        </div>
-      ) : (
-        <ShopCover name={b.name} category={b.category} showLabel
-                   locality={b.city ? `${b.city}, ${b.state ?? ""}` : b.state}
-                   className="h-44 rounded-lg sm:h-52" />
-      )}
-
-      <div className="mt-6 flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">{b.name}</h1>
-          <div className="mt-2 flex flex-wrap items-center gap-3 text-steel">
-            <span>{CATEGORY_LABELS[b.category] ?? b.category}</span>
-            <Stars avg={b.rating_avg} count={b.rating_count} />
-            {b.google_rating != null && (
-              <span className="text-sm">
-                <span className="font-semibold text-amber-ink">{b.google_rating.toFixed(1)}★</span>{" "}
-                on Google{b.google_rating_count != null && ` (${b.google_rating_count})`}
-              </span>
+    <div className="mx-auto max-w-5xl px-4 py-6">
+      {/* Hero: photo or illustrated cover with identity overlay */}
+      <div className="relative h-60 overflow-hidden rounded-2xl shadow-(--shadow-card) sm:h-72">
+        {b.photos.length > 0 ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={mediaUrl(b.photos[0].path)} alt={`${b.name} photo`}
+               className="absolute inset-0 h-full w-full object-cover" />
+        ) : (
+          <ShopCover name={b.name} category={b.category} showMonogram={false}
+                     className="absolute inset-0" />
+        )}
+        <div className="absolute inset-0 bg-gradient-to-t from-charcoal/90 via-charcoal/30 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="rounded-full bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white backdrop-blur">
+              {CATEGORY_LABELS[b.category] ?? b.category}
+            </span>
+            <TrustBadges b={{ ...b, has_active_offer: b.offers.length > 0 }} compact />
+            {maxSavePct != null && (
+              <a href="#offers"
+                 className="rounded-full bg-cta px-2.5 py-0.5 text-xs font-bold text-ink hover:bg-cta-hover">
+                Save up to {maxSavePct}% ↓
+              </a>
             )}
-            <TrustBadges b={{ ...b, has_active_offer: b.offers.length > 0 }} />
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[15px] text-steel">
-            {b.address_raw && <span>{b.address_raw}</span>}
-            <span
-              className={`font-medium ${
-                status.kind === "open" ? "text-pine" : status.kind === "closed" ? "text-danger" : "text-faint"
-              }`}
-            >
+          <h1 className="mt-2 text-3xl font-bold text-white sm:text-4xl">{b.name}</h1>
+          <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/85">
+            {b.rating_count > 0 && (
+              <span><strong className="text-amber">{b.rating_avg?.toFixed(1)}★</strong> on YourFleet ({b.rating_count})</span>
+            )}
+            {b.google_rating != null && (
+              <span><strong className="text-amber">{b.google_rating.toFixed(1)}★</strong> on Google
+                {b.google_rating_count != null && ` (${b.google_rating_count.toLocaleString()})`}</span>
+            )}
+            {b.rating_count === 0 && b.google_rating == null && <span>No reviews yet</span>}
+            <span className={`font-semibold ${
+              status.kind === "open" ? "text-[#7fd4a3]" : status.kind === "closed" ? "text-[#ff9d8f]" : "text-white/55"}`}>
               {status.label}
             </span>
           </div>
-          {maxSavePct != null && (
-            <a
-              href="#offers"
-              className="mt-3 inline-flex items-center gap-2 rounded-md bg-cta px-3 py-1.5 text-sm font-bold text-ink hover:bg-cta-hover"
-            >
-              Partner offer — save up to {maxSavePct}% ↓
-            </a>
-          )}
         </div>
-        <div className="flex flex-wrap gap-2">
-          {b.phone && (
-            <a href={`tel:${b.phone}`} className="btn">Call {b.phone}</a>
-          )}
-          <a href={directions} target="_blank" rel="noopener noreferrer" className="btn-quiet">
+        {b.photos.length === 0 && (
+          <p className="absolute right-3 top-3 rounded bg-charcoal/60 px-2 py-0.5 text-[10px] text-white/60">
+            Illustration — no photos yet
+          </p>
+        )}
+      </div>
+
+      {b.photos.length > 1 && (
+        <div className="mt-2 flex gap-2 overflow-x-auto">
+          {b.photos.slice(1, 6).map((p) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img key={p.id} src={mediaUrl(p.path)} alt={p.caption ?? `${b.name} photo`}
+                 className="h-20 w-28 shrink-0 rounded-lg object-cover" />
+          ))}
+        </div>
+      )}
+
+      {/* Action bar */}
+      <div className="card mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 p-4">
+        {address && <p className="text-[15px] text-steel">{address}</p>}
+        <div className="ml-auto flex flex-wrap gap-2">
+          {b.phone && <a href={`tel:${b.phone}`} className="btn !py-2">Call {b.phone}</a>}
+          <a href={directions} target="_blank" rel="noopener noreferrer" className="btn-quiet !py-2">
             Directions
           </a>
-          <a href={googleUrl} target="_blank" rel="noopener noreferrer" className="btn-quiet">
+          <a href={googleUrl} target="_blank" rel="noopener noreferrer" className="btn-quiet !py-2">
             View on Google
           </a>
           {user && (
-            <button onClick={toggleFavorite} className="btn-quiet" aria-pressed={favorite}>
+            <button onClick={toggleFavorite} aria-pressed={favorite}
+                    className={`btn-quiet !py-2 ${favorite ? "!border-pine/50 !bg-pine-wash !text-pine" : ""}`}>
               {favorite ? "Saved ✓" : "Save shop"}
             </button>
           )}
         </div>
       </div>
 
-      <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_340px]">
-        <div className="space-y-8">
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_340px]">
+        <div className="space-y-6">
           {/* Offers — amber is reserved for this block */}
           {b.offers.length > 0 && (
-            <section id="offers" className="rounded-xl border border-amber/60 bg-amber-wash shadow-(--shadow-card) p-5 scroll-mt-20">
-              <h2 className="text-xl font-bold text-amber-ink">Verified partner offers</h2>
-              <p className="mt-1 text-sm text-amber-ink/80">
+            <section id="offers" className="scroll-mt-20 rounded-xl border border-amber/60 bg-amber-wash p-5 shadow-(--shadow-card)">
+              <div className="flex items-center gap-3">
+                <span className="grid h-10 w-10 place-items-center rounded-lg bg-amber/25 text-amber-ink">
+                  <Icon name="tag" />
+                </span>
+                <h2 className="text-lg font-bold text-amber-ink">Verified partner offers</h2>
+              </div>
+              <p className="mt-2 text-sm text-amber-ink/80">
                 Negotiated with this shop under a marketplace agreement. Final invoice may add
                 parts, taxes, or approved extra labor — the shop must explain any additions
                 before you commit.
@@ -160,17 +232,17 @@ function BusinessPageInner() {
                       ? Math.round((o.savings_cents / o.standard_price_cents) * 100)
                       : null;
                   return (
-                    <li key={o.id} className="rounded-xl border border-amber/40 bg-panel shadow-(--shadow-card) p-4">
+                    <li key={o.id} className="rounded-xl border border-amber/40 bg-panel p-4 shadow-(--shadow-card)">
                       <div className="flex flex-wrap items-start justify-between gap-2">
                         <h3 className="display font-semibold">{o.title}</h3>
                         {pct != null && (
-                          <span className="rounded bg-cta px-2 py-0.5 text-sm font-bold text-ink">
+                          <span className="rounded-full bg-cta px-2.5 py-0.5 text-sm font-bold text-ink">
                             Save {pct}%
                           </span>
                         )}
                       </div>
                       {o.standard_price_cents != null && o.marketplace_price_cents != null ? (
-                        <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-md border border-line bg-line">
+                        <div className="mt-3 grid grid-cols-2 gap-px overflow-hidden rounded-lg border border-line bg-line">
                           <div className="bg-mist p-3">
                             <p className="text-xs text-steel">Regular price (documented)</p>
                             <p className="mt-0.5 text-xl font-semibold text-faint line-through">
@@ -205,10 +277,8 @@ function BusinessPageInner() {
                         </p>
                       )}
                       {canBook && (
-                        <button
-                          className="btn mt-3"
-                          onClick={() => { setBookingOffer(o.id); setBookingOpen(true); }}
-                        >
+                        <button className="btn mt-3"
+                                onClick={() => { setBookingOffer(o.id); setBookingOpen(true); }}>
                           Book with this offer
                         </button>
                       )}
@@ -219,33 +289,35 @@ function BusinessPageInner() {
             </section>
           )}
 
-          {/* Services */}
-          <section>
-            <h2 className="text-xl font-bold">Services</h2>
+          <SectionCard icon="wrench" title="Services">
             {b.services.length === 0 ? (
-              <p className="mt-2 text-[15px] text-steel">
-                Service list not provided yet. Call the shop to confirm what they handle.
-              </p>
+              <div className="rounded-lg border border-dashed border-line bg-mist/60 px-4 py-6 text-center">
+                <p className="text-sm text-steel">
+                  Service list not provided yet — call the shop to confirm what they handle.
+                </p>
+                {b.phone && (
+                  <a href={`tel:${b.phone}`} className="btn-quiet mt-3 !py-2 text-sm">Call the shop</a>
+                )}
+              </div>
             ) : (
-              <ul className="mt-3 divide-y divide-line card">
+              <ul className="divide-y divide-line/70">
                 {b.services.map((s) => (
-                  <li key={s.id} className="flex items-baseline justify-between gap-4 px-4 py-2.5">
+                  <li key={s.id} className="flex items-baseline justify-between gap-4 py-2.5">
                     <span className="font-medium">{s.service.name}</span>
-                    <span className="text-sm text-steel">
+                    <span className="text-sm font-semibold text-steel">
                       {s.standard_price_cents != null ? `from ${fmtUsd(s.standard_price_cents)}` : s.price_note ?? "Quote on request"}
                     </span>
                   </li>
                 ))}
               </ul>
             )}
-          </section>
+          </SectionCard>
 
-          <section>
-            <h2 className="text-xl font-bold">About</h2>
+          <SectionCard icon="info" title="About">
             {b.description ? (
-              <p className="mt-2 whitespace-pre-line text-[15px] text-steel">{b.description}</p>
+              <p className="whitespace-pre-line text-[15px] leading-relaxed text-steel">{b.description}</p>
             ) : (
-              <p className="mt-2 text-[15px] text-steel">
+              <p className="text-[15px] leading-relaxed text-steel">
                 {CATEGORY_LABELS[b.category] ?? "Service"} shop
                 {b.city ? ` in ${b.city}, ${b.state}` : b.state ? ` in ${b.state}` : ""}, listed in
                 the YourFleet directory from our operator-curated shop map.
@@ -254,20 +326,21 @@ function BusinessPageInner() {
                   : " Details like services, hours and photos are confirmed once the owner claims this listing — call ahead to confirm."}
               </p>
             )}
-          </section>
+          </SectionCard>
 
-          {/* Reviews */}
-          <section>
-            <h2 className="text-xl font-bold">Reviews</h2>
-            <p className="mt-1 text-sm text-faint">
-              Only drivers with completed YourFleet bookings can review this shop.
-            </p>
+          <SectionCard icon="star" title="Reviews"
+                       right={reviews.length > 0 ? <Stars avg={b.rating_avg} count={b.rating_count} /> : undefined}>
             {reviews.length === 0 ? (
-              <p className="mt-3 text-[15px] text-steel">No reviews yet.</p>
+              <div className="rounded-lg border border-dashed border-line bg-mist/60 px-4 py-6 text-center">
+                <p className="text-sm text-steel">
+                  No YourFleet reviews yet. Only drivers with completed bookings can review this
+                  shop — so every review here is a real job.
+                </p>
+              </div>
             ) : (
-              <ul className="mt-3 space-y-3">
+              <ul className="space-y-3">
                 {reviews.map((r) => (
-                  <li key={r.id} className="card p-4">
+                  <li key={r.id} className="rounded-lg border border-line/70 bg-mist/50 p-4">
                     <div className="flex items-center justify-between">
                       <span className="font-semibold text-amber-ink">{r.rating}★</span>
                       <span className="text-xs text-faint">{new Date(r.created_at).toLocaleDateString()}</span>
@@ -277,48 +350,61 @@ function BusinessPageInner() {
                 ))}
               </ul>
             )}
-          </section>
+          </SectionCard>
         </div>
 
         {/* Sidebar */}
-        <aside className="space-y-5 self-start">
-          <a
-            href={directions}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Open directions to ${b.name}`}
-            className="block h-44 overflow-hidden rounded-lg border border-line"
-          >
-            <LocationMap lat={b.lat} lng={b.lng} />
-          </a>
-          <div className="card p-5">
-            <h2 className="font-bold">Request a repair</h2>
-            <p className="mt-1 text-sm text-steel">
+        <aside className="space-y-4 self-start">
+          <div className="card overflow-hidden p-0">
+            <a href={directions} target="_blank" rel="noopener noreferrer"
+               aria-label={`Open directions to ${b.name}`} className="block h-44">
+              <LocationMap lat={b.lat} lng={b.lng} />
+            </a>
+            <div className="border-t border-line/70 px-4 py-2.5 text-sm text-steel">
+              {b.city ? `${b.city}, ${b.state}` : b.state} ·{" "}
+              <a href={directions} target="_blank" rel="noopener noreferrer"
+                 className="font-medium text-pine hover:underline">Get directions</a>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-pine-dark p-5 text-white shadow-(--shadow-card)">
+            <h2 className="display text-lg font-bold">Request a repair</h2>
+            <p className="mt-1 text-sm text-white/75">
               Describe the problem; the shop replies with a price and time. Booking through
               YourFleet is how offer pricing is honored.
             </p>
             {canBook ? (
-              <button className="btn mt-3 w-full" onClick={() => { setBookingOffer(null); setBookingOpen(true); }}>
+              <button className="btn mt-4 w-full"
+                      onClick={() => { setBookingOffer(null); setBookingOpen(true); }}>
                 Request repair or quote
               </button>
             ) : user ? (
-              <p className="mt-3 text-sm text-steel">Provider accounts can&apos;t book repairs.</p>
+              <p className="mt-3 text-sm text-white/70">Provider accounts can&apos;t book repairs.</p>
             ) : (
-              <Link href={`/login?next=/business/${b.id}`} className="btn mt-3 w-full">
+              <Link href={`/login?next=/business/${b.id}`} className="btn mt-4 w-full">
                 Sign in to request
               </Link>
             )}
           </div>
 
           <div className="card p-5">
-            <h2 className="font-bold">Hours</h2>
+            <div className="flex items-center gap-3">
+              <span className="grid h-9 w-9 place-items-center rounded-lg bg-pine-wash text-pine">
+                <Icon name="clock" className="h-4.5 w-4.5" />
+              </span>
+              <h2 className="font-bold">Hours</h2>
+              <span className={`ml-auto text-sm font-semibold ${
+                status.kind === "open" ? "text-pine" : status.kind === "closed" ? "text-danger" : "text-faint"}`}>
+                {status.kind === "unknown" ? "Not verified" : status.kind === "open" ? "Open" : "Closed"}
+              </span>
+            </div>
             {b.hours ? (
-              <table className="mt-2 w-full text-sm">
+              <table className="mt-3 w-full text-sm">
                 <tbody>
                   {Object.entries(DAY_LABELS).map(([key, label]) => (
                     <tr key={key}>
                       <td className="py-0.5 pr-3 text-steel">{label}</td>
-                      <td className="py-0.5 font-medium">
+                      <td className="py-0.5 text-right font-medium">
                         {b.hours![key]?.length
                           ? b.hours![key].map((r) => r.join("–")).join(", ")
                           : "Closed"}
@@ -328,11 +414,9 @@ function BusinessPageInner() {
                 </tbody>
               </table>
             ) : (
-              <p className="mt-2 text-sm text-steel">
-                Hours not verified. Call before you drive.
-              </p>
+              <p className="mt-3 text-sm text-steel">Hours not verified. Call before you drive.</p>
             )}
-            <dl className="mt-3 space-y-1 border-t border-line pt-3 text-sm">
+            <dl className="mt-3 space-y-1.5 border-t border-line/70 pt-3 text-sm">
               <div className="flex justify-between">
                 <dt className="text-steel">Mobile service</dt>
                 <dd className="font-medium">{b.is_mobile_service == null ? "Unknown" : b.is_mobile_service ? "Yes" : "No"}</dd>
@@ -356,10 +440,9 @@ function BusinessPageInner() {
 
           {!b.is_claimed && (
             <div className="rounded-xl border border-line bg-mist p-5 text-sm text-steel">
-            <p className="font-semibold text-ink">Is this your shop?</p>
+              <p className="font-semibold text-ink">Is this your shop?</p>
               <p className="mt-1">
-                Claim this listing to manage your details, publish offers, and receive booking
-                requests.
+                Claim this listing to manage your details, publish offers, and receive booking requests.
               </p>
               <Link href={`/provider/claim?business=${b.id}`} className="btn-quiet mt-3 w-full">
                 Claim this business
@@ -367,7 +450,7 @@ function BusinessPageInner() {
             </div>
           )}
 
-          <p className="text-xs text-faint">
+          <p className="px-1 text-xs text-faint">
             See something wrong? Imported listings can be out of date —{" "}
             <a className="underline" href={`mailto:support@yourfleet.example?subject=Listing issue ${b.id}`}>
               report an issue
@@ -400,10 +483,8 @@ function BusinessPageInner() {
           Directions
         </a>
         {canBook ? (
-          <button
-            className="btn flex-[1.4] !py-2.5"
-            onClick={() => { setBookingOffer(null); setBookingOpen(true); }}
-          >
+          <button className="btn flex-[1.4] !py-2.5"
+                  onClick={() => { setBookingOffer(null); setBookingOpen(true); }}>
             Request repair
           </button>
         ) : !user ? (
@@ -412,7 +493,6 @@ function BusinessPageInner() {
           </Link>
         ) : null}
       </div>
-      {/* Spacer so the fixed bar never covers content on mobile */}
       <div className="h-20 lg:hidden" aria-hidden />
     </div>
   );

@@ -22,8 +22,8 @@ URL_RE = re.compile(
     r"^(?:https?://)?(?:www\.)?[a-z0-9][a-z0-9\-]*(?:\.[a-z0-9\-]+)+(?:/\S*)?$", re.I
 )
 CITY_STATE_ZIP_RE = re.compile(r",\s*([^,]+?),\s*([A-Z]{2})[\s,]+(\d{5})(?:-\d{4})?")
-# Country suffixes seen in the dataset, including mojibake of non-ASCII country names.
-COUNTRY_SUFFIX_RE = re.compile(r",?\s*(United States|USA|U\.S\.A\.|�+)\s*$", re.I)
+# Country suffixes seen in the dataset, including non-ASCII ("США") and its mojibake.
+COUNTRY_SUFFIX_RE = re.compile(r",?\s*(United States|USA|U\.S\.A\.|США|�+)\s*$", re.I)
 
 
 @dataclass

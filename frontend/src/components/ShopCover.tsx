@@ -151,47 +151,58 @@ export function ShopCover({
   locality,
   className = "",
   showLabel = false,
+  showMonogram = true,
 }: {
   name: string;
   category: string;
   locality?: string | null;
   className?: string;
   showLabel?: boolean;
+  showMonogram?: boolean;
 }) {
   const h = hashCode(name);
   const tint = TINTS[h % TINTS.length];
   const flip = h % 2 === 1;
-  const sunX = 20 + (h % 5) * 28;
+  const sunPos = 12 + (h % 5) * 18; // percent from the left
   const Scene = SCENES[category] ?? SCENES.other;
   return (
-    <div aria-hidden className={`relative overflow-hidden bg-charcoal ${className}`}>
+    <div
+      aria-hidden
+      className={`relative overflow-hidden ${className}`}
+      style={{ background: `linear-gradient(150deg, #171b1d 0%, ${tint}33 70%, #14181a 100%)` }}
+    >
+      {/* amber dusk glow — CSS so it scales to any aspect ratio */}
+      <div
+        className="absolute h-[55%] aspect-square rounded-full opacity-60"
+        style={{
+          left: `${sunPos}%`, top: "-12%",
+          background: "radial-gradient(circle, #e8a31799 0%, #e8a31722 45%, transparent 70%)",
+        }}
+      />
+      {/* road bed + center line */}
+      <div className="absolute inset-x-0 bottom-0 h-[24%] bg-[#1c2125]" />
+      <div
+        className="absolute inset-x-0 bottom-[10%] h-[3px] opacity-50"
+        style={{ background: "repeating-linear-gradient(90deg, #e8a317 0 26px, transparent 26px 50px)" }}
+      />
+      {/* vehicle scene keeps its own aspect ratio, centered */}
       <svg
-        className="absolute inset-0 h-full w-full"
-        preserveAspectRatio="xMidYMax slice"
+        className="absolute bottom-0 left-1/2 h-full -translate-x-1/2"
+        style={{ aspectRatio: "160 / 100" }}
+        preserveAspectRatio="xMidYMax meet"
         viewBox="0 0 160 100"
       >
-        {/* dusk sky */}
-        <rect width="160" height="100" fill="#14181a" />
-        <rect width="160" height="100" fill={tint} opacity="0.14" />
-        <circle cx={sunX} cy="26" r="9" fill="#e8a317" opacity="0.55" />
-        <circle cx={sunX} cy="26" r="16" fill="#e8a317" opacity="0.12" />
-        {/* distant ridge */}
-        <path d="M0 62 40 50l30 8 36-12 54 14v40H0Z" fill="#10231a" opacity="0.8" />
-        {/* road */}
-        <rect y="78" width="160" height="22" fill="#1c2125" />
-        <g stroke="#e8a317" strokeWidth="1.6" strokeDasharray="8 7" opacity="0.5">
-          <line x1="0" y1="88" x2="160" y2="88" />
-        </g>
         <g transform={flip ? "translate(160 0) scale(-1 1)" : undefined}>
           <Scene tint={tint} />
         </g>
       </svg>
-      {/* monogram plate */}
-      <div className="absolute left-2.5 top-2.5 rounded bg-charcoal/70 px-2 py-0.5">
-        <span className="display text-xs font-bold tracking-widest text-white/90">
-          {monogram(name)}
-        </span>
-      </div>
+      {showMonogram && (
+        <div className="absolute left-2.5 top-2.5 rounded bg-charcoal/70 px-2 py-0.5">
+          <span className="display text-xs font-bold tracking-widest text-white/90">
+            {monogram(name)}
+          </span>
+        </div>
+      )}
       {showLabel && (
         <div className="absolute bottom-2 right-2.5 text-right">
           {locality && (
