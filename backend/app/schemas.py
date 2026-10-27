@@ -139,6 +139,7 @@ class BusinessListItem(ORMModel):
     google_rating_count: int | None = None
     google_primary_type: str | None = None
     has_google_photo: bool = False
+    views_count: int = 0
     distance_miles: float | None = None
 
 
@@ -166,6 +167,7 @@ class BusinessDetailOut(ORMModel):
     google_place_url: str | None = None
     google_primary_type: str | None = None
     has_google_photo: bool = False
+    views_count: int = 0
     is_claimed: bool = False
     is_verified: bool = False
     services: list[BusinessServiceOut] = []

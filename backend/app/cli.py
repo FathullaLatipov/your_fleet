@@ -135,6 +135,57 @@ def cmd_import_vehicles(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_outreach(args: argparse.Namespace) -> int:
+    """Sales call list: best-rated unclaimed shops with real phone numbers."""
+    import csv
+
+    from sqlalchemy import select
+
+    from app.config import get_settings
+    from app.models import Business
+
+    base = get_settings().frontend_url.rstrip("/")
+    with SessionLocal() as db:
+        q = (
+            select(Business)
+            .where(
+                Business.is_published,
+                Business.owner_user_id.is_(None),
+                Business.phone_normalized.isnot(None),
+                Business.google_rating >= args.min_rating,
+                Business.google_rating_count >= args.min_reviews,
+            )
+            .order_by(Business.google_rating.desc(),
+                      Business.google_rating_count.desc())
+            .limit(args.limit)
+        )
+        if args.state:
+            q = q.where(Business.state == args.state.upper())
+        rows = db.execute(q).scalars().all()
+
+        print(f"{len(rows)} unclaimed shops, rating >= {args.min_rating} "
+              f"({args.min_reviews}+ reviews){f', state {args.state.upper()}' if args.state else ''}:\n")
+        for b in rows[:25]:
+            print(f"  {b.google_rating:.1f}* ({b.google_rating_count:>5}) "
+                  f"{(b.name or '')[:38]:<38} {b.city or '':<18} {b.state or '':<2} "
+                  f"{b.phone or '':<16} views={b.views_count}")
+        if len(rows) > 25:
+            print(f"  ... and {len(rows) - 25} more")
+
+        if args.csv:
+            with open(args.csv, "w", newline="", encoding="utf-8-sig") as f:
+                w = csv.writer(f)
+                w.writerow(["name", "city", "state", "phone", "google_rating",
+                            "google_reviews", "google_type", "listing_views",
+                            "website", "listing_url"])
+                for b in rows:
+                    w.writerow([b.name, b.city, b.state, b.phone, b.google_rating,
+                                b.google_rating_count, b.google_primary_type,
+                                b.views_count, b.website, f"{base}/business/{b.id}"])
+            print(f"\nCSV written: {args.csv}")
+    return 0
+
+
 def cmd_check_maintenance(_: argparse.Namespace) -> int:
     from sqlalchemy import select
 
@@ -217,6 +268,15 @@ def main() -> int:
     p_vi.add_argument("--owner-email", required=True)
     p_vi.add_argument("--dry-run", action="store_true")
     p_vi.set_defaults(func=cmd_import_vehicles)
+
+    p_or = sub.add_parser("outreach-report",
+                          help="Top unclaimed shops by Google rating - sales call list")
+    p_or.add_argument("--state", default=None, help="Two-letter state filter")
+    p_or.add_argument("--min-rating", type=float, default=4.5)
+    p_or.add_argument("--min-reviews", type=int, default=25)
+    p_or.add_argument("--limit", type=int, default=500)
+    p_or.add_argument("--csv", default=None, help="Write full list to this CSV file")
+    p_or.set_defaults(func=cmd_outreach)
 
     p_chk = sub.add_parser("check-maintenance",
                            help="Send due/overdue maintenance notifications for all vehicles")

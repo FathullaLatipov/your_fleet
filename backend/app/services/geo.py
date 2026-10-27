@@ -53,7 +53,7 @@ SELECT b.id, b.name, b.category, b.city, b.state, b.phone, b.lat, b.lng,
        ) AND b.partner_status = 'active' AS has_active_offer,
        b.is_mobile_service, b.accepts_emergency, b.hours,
        b.google_rating, b.google_rating_count, b.google_primary_type,
-       (b.google_photo_name IS NOT NULL) AS has_google_photo,
+       (b.google_photo_name IS NOT NULL) AS has_google_photo, b.views_count,
        (SELECT min(bs.standard_price_cents) FROM business_services bs
         WHERE bs.business_id = b.id AND bs.standard_price_cents IS NOT NULL
        ) AS price_from_cents,

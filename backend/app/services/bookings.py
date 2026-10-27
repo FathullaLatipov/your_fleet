@@ -216,12 +216,17 @@ _STATUS_LABEL = {
 def _notify_parties(db, booking, business, actor_kind_, from_status, to_status):
     title = _STATUS_LABEL.get(to_status, f"Booking {to_status.value}")
     data = {"booking_id": str(booking.id), "business_id": str(business.id)}
+    # Status moves that deserve an inbox ping, not just the in-app bell.
+    emailworthy = to_status in (S.QUOTED, S.ACCEPTED, S.CONFIRMED, S.COMPLETED, S.CANCELLED)
+    cta = ("Open booking", f"/bookings/{booking.id}")
     if actor_kind_ != "driver":
         notify(db, booking.driver_id, f"booking.{to_status.value}", title,
-               f"{business.name}: {from_status.value} -> {to_status.value}", data)
+               f"{business.name}: {from_status.value} -> {to_status.value}", data,
+               email=emailworthy, email_cta=cta)
     if actor_kind_ != "provider" and business.owner_user_id:
         notify(db, business.owner_user_id, f"booking.{to_status.value}", title,
-               f"Booking {str(booking.id)[:8]}: {from_status.value} -> {to_status.value}", data)
+               f"Booking {str(booking.id)[:8]}: {from_status.value} -> {to_status.value}", data,
+               email=emailworthy, email_cta=cta)
 
 
 def review_eligible(db: Session, booking_id: uuid.UUID, driver_id: uuid.UUID) -> Booking | None:

@@ -78,6 +78,8 @@ def check_vehicle_maintenance(db: Session, vehicle: Vehicle) -> int:
                     f"unit {vehicle.unit_number}",
                     ", ".join(detail) or None,
                     {"vehicle_id": str(vehicle.id), "schedule_id": str(s.id)},
+                    email=True,
+                    email_cta=("Open the truck", f"/fleet/{vehicle.id}"),
                 )
                 s.notified_at = utcnow()
                 sent += 1

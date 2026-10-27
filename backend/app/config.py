@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     environment: str = "development"
     media_dir: str = "media"
     google_places_api_key: str = ""
+    resend_api_key: str = ""
+    email_from: str = "YourFleet <onboarding@resend.dev>"
+    frontend_url: str = "https://your-fleet.vercel.app"
 
     @property
     def cors_origin_list(self) -> list[str]:

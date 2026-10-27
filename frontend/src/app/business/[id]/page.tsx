@@ -479,6 +479,11 @@ function BusinessPageInner() {
           {!b.is_claimed && (
             <div className="rounded-xl border border-line bg-mist p-5 text-sm text-steel">
               <p className="font-semibold text-ink">Is this your shop?</p>
+              {b.views_count > 0 && (
+                <p className="mt-1 font-semibold text-pine">
+                  {b.views_count.toLocaleString()} driver view{b.views_count === 1 ? "" : "s"} on YourFleet.
+                </p>
+              )}
               <p className="mt-1">
                 Claim this listing to manage your details, publish offers, and receive booking requests.
               </p>

@@ -214,6 +214,12 @@ def business_detail(business_id: uuid.UUID, db: Session = Depends(get_db)):
     ).unique().scalar_one_or_none()
     if business is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Business not found")
+    # Listing view counter (atomic; feeds the claim pitch).
+    from sqlalchemy import update as _update
+
+    db.execute(_update(Business).where(Business.id == business_id)
+               .values(views_count=Business.views_count + 1))
+    db.commit()
     out = BusinessDetailOut.model_validate(business)
     out.is_claimed = business.owner_user_id is not None
     out.is_verified = business.identity_verified_at is not None

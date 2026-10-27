@@ -87,10 +87,12 @@ def create_booking(
                         from_status=None, to_status=BookingStatus.REQUESTED.value))
     if business.owner_user_id:
         notify(db, business.owner_user_id, "booking.requested",
-               "New repair request",
-               f"{'EMERGENCY — ' if body.urgency.value == 'emergency' else ''}"
-               f"New request for {business.name}",
-               {"booking_id": str(booking.id)})
+               f"{'EMERGENCY — new' if body.urgency.value == 'emergency' else 'New'} repair request",
+               f"A driver requested a repair at {business.name}. Respond with a quote "
+               "or accept it — fast replies win jobs.",
+               {"booking_id": str(booking.id)},
+               email=True,
+               email_cta=("View the request", f"/bookings/{booking.id}"))
     db.commit()
     return booking
 

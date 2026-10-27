@@ -27,3 +27,4 @@ backend/media/
 
 # Carrier data exports - real fleet data, never commit
 *.xlsx
+outreach*.csv

@@ -54,6 +54,9 @@ export function Header() {
           {user && (user.role === "driver" || user.role === "fleet_manager") && (
             <NavLink href="/fleet" active={pathname.startsWith("/fleet")}>Fleet</NavLink>
           )}
+          {(!user || user.role === "provider") && (
+            <NavLink href="/for-shops" active={pathname === "/for-shops"}>For shops</NavLink>
+          )}
         </nav>
         <div className="ml-auto flex items-center gap-2.5">
           {loading ? null : user ? (

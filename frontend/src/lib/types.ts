@@ -33,6 +33,7 @@ export interface BusinessListItem {
   google_rating_count: number | null;
   google_primary_type: string | null;
   has_google_photo: boolean;
+  views_count: number;
   distance_miles: number | null;
 }
 
@@ -91,6 +92,7 @@ export interface BusinessDetail {
   google_place_url: string | null;
   google_primary_type: string | null;
   has_google_photo: boolean;
+  views_count: number;
   is_claimed: boolean;
   is_verified: boolean;
   services: BusinessService[];

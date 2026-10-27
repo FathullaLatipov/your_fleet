@@ -143,6 +143,9 @@ class Business(Base):
     google_photo_name: Mapped[str | None] = mapped_column(String(512))
     google_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    # Listing page views — fuel for the "drivers are already looking at you" pitch.
+    views_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     is_published: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(

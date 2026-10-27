@@ -86,7 +86,10 @@ def decide_claim(
                     entity_id=str(claim.id), data={"approve": body.approve}))
     notify(db, claim.user_id, "claim.decided",
            f"Your claim was {'approved' if body.approve else 'rejected'}",
-           f"Business: {business.name}", {"business_id": str(business.id)})
+           f"Business: {business.name}", {"business_id": str(business.id)},
+           email=True,
+           email_cta=("Manage your shop", "/provider") if body.approve
+           else ("See details", "/provider"))
     db.commit()
     return claim
 

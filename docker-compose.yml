@@ -34,6 +34,9 @@ services:
       GOOGLE_PLACES_API_KEY: ${GOOGLE_PLACES_API_KEY:-}
       SAMSARA_API_TOKEN: ${SAMSARA_API_TOKEN:-}
       MONDAY_API_TOKEN: ${MONDAY_API_TOKEN:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-YourFleet <onboarding@resend.dev>}
+      FRONTEND_URL: ${FRONTEND_URL:-https://your-fleet.vercel.app}
       ENVIRONMENT: production
       MEDIA_DIR: /app/media
     ports:
