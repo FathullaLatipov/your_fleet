@@ -31,13 +31,34 @@ interface ShopOptions {
 
 type Tab = "overview" | "maintenance" | "defects" | "costs" | "history";
 
+/* Schedule title -> service-catalog slug, so "Find a shop" lands pre-filtered. */
+const TITLE_SERVICE: [string, string][] = [
+  ["oil", "pm-service"], ["pm", "pm-service"], ["lube", "pm-service"],
+  ["tire", "tires"], ["brake", "brakes"], ["transmission", "transmission"],
+  ["electrical", "electrical"], ["dpf", "aftertreatment"], ["coolant", "diesel-engine"],
+];
+
+function shopLinkFor(title: string): string {
+  const t = title.toLowerCase();
+  for (const [key, slug] of TITLE_SERVICE) {
+    if (t.includes(key)) return `/search?service=${slug}`;
+  }
+  return "/search";
+}
+
 /* ------------------------------------------------------------------ */
 
-function TruckDetails({ v, onSaved }: { v: Vehicle; onSaved: () => void }) {
+function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () => void; editSignal?: number }) {
   const [edit, setEdit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [f, setF] = useState<Record<string, string>>({});
+
+  // A warning chip can jump here and open the editor directly.
+  useEffect(() => {
+    if (editSignal > 0) openEdit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editSignal]);
 
   function openEdit() {
     setF({
@@ -188,6 +209,18 @@ export default function VehiclePage() {
   const [defOpen, setDefOpen] = useState(false);
   const [defForm, setDefForm] = useState({ type: "", comment: "" });
   const [options, setOptions] = useState<Record<string, ShopOptions | "loading">>({});
+  const [highlightSched, setHighlightSched] = useState<string | null>(null);
+  const [editSignal, setEditSignal] = useState(0);
+
+  // After jumping to the Maintenance tab, scroll the highlighted schedule into view.
+  useEffect(() => {
+    if (tab === "maintenance" && highlightSched) {
+      const el = document.getElementById(`sched-${highlightSched}`);
+      el?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const t = setTimeout(() => setHighlightSched(null), 2600);
+      return () => clearTimeout(t);
+    }
+  }, [tab, highlightSched]);
 
   const load = useCallback(() => {
     api<VehicleDetail>(`/api/fleet/vehicles/${id}`).then(setD).catch((e) => setError(e.message));
@@ -305,14 +338,53 @@ export default function VehiclePage() {
             </form>
           </div>
         </div>
-        {v.warnings.length > 0 && (
-          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-danger-wash px-3 py-2.5">
-            <span className="text-sm font-bold text-danger">⚠ Warnings:</span>
-            {v.warnings.map((w) => (
-              <span key={w} className="rounded-full bg-panel px-2.5 py-0.5 text-xs font-medium text-danger">{w}</span>
-            ))}
-          </div>
-        )}
+        {(() => {
+          /* Clickable alerts: each chip jumps to the place where it's fixed. */
+          const alerts: { key: string; text: string; tone: "danger" | "amber"; go: () => void }[] = [];
+          for (const s of d.schedules) {
+            if (s.status === "overdue" || s.status === "due_soon") {
+              alerts.push({
+                key: `sched-${s.id}`,
+                text: `${s.title} ${s.status === "overdue" ? "overdue" : "due soon"}`,
+                tone: s.status === "overdue" ? "danger" : "amber",
+                go: () => { setTab("maintenance"); setHighlightSched(s.id); },
+              });
+            }
+          }
+          if (openDefects > 0) {
+            alerts.push({
+              key: "defects",
+              text: `${openDefects} open PTI defect${openDefects > 1 ? "s" : ""}`,
+              tone: "danger",
+              go: () => setTab("defects"),
+            });
+          }
+          for (const w of v.warnings) {
+            alerts.push({
+              key: w,
+              text: w,
+              tone: /expired/i.test(w) ? "danger" : "amber",
+              go: () => { setTab("overview"); setEditSignal((n) => n + 1); },
+            });
+          }
+          if (alerts.length === 0) return null;
+          return (
+            <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-danger-wash/70 px-3 py-2.5">
+              <span className="text-sm font-bold text-danger">⚠ Needs attention:</span>
+              {alerts.map((a) => (
+                <button
+                  key={a.key}
+                  onClick={a.go}
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold transition-[transform,box-shadow] hover:-translate-y-px hover:shadow-[0_2px_6px_rgb(22_24_27/0.15)] ${
+                    a.tone === "danger" ? "bg-panel text-danger" : "bg-amber-wash text-amber-ink"
+                  }`}
+                >
+                  {a.text} →
+                </button>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Tabs */}
@@ -342,7 +414,7 @@ export default function VehiclePage() {
       </div>
 
       <div className="mt-5 space-y-5">
-        {tab === "overview" && <TruckDetails v={v} onSaved={load} />}
+        {tab === "overview" && <TruckDetails v={v} onSaved={load} editSignal={editSignal} />}
 
         {tab === "maintenance" && (
           <section className="card p-5">
@@ -401,7 +473,9 @@ export default function VehiclePage() {
             ) : (
               <ul className="mt-4 divide-y divide-line/70">
                 {d.schedules.map((s) => (
-                  <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3.5">
+                  <li key={s.id} id={`sched-${s.id}`}
+                      className={`flex flex-wrap items-center gap-x-4 gap-y-2 py-3.5 transition-colors duration-700 ${
+                        highlightSched === s.id ? "-mx-3 rounded-lg bg-amber-wash px-3" : ""}`}>
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold">{s.title}</p>
                       <p className="mt-0.5 text-sm text-steel">
@@ -415,7 +489,7 @@ export default function VehiclePage() {
                       {s.status === "ok" ? "OK" : s.status === "due_soon" ? "Due soon" : s.status === "overdue" ? "Overdue" : "—"}
                     </span>
                     {(s.status === "due_soon" || s.status === "overdue") && (
-                      <Link href="/search" className="btn !py-1.5 text-sm">Find a shop</Link>
+                      <Link href={shopLinkFor(s.title)} className="btn !py-1.5 text-sm">Find a shop</Link>
                     )}
                     <button className="btn-quiet !py-1.5 text-sm"
                             onClick={() => post(`/api/fleet/schedules/${s.id}/done`, {})}>
