@@ -12,6 +12,7 @@ import {
   fmtUsd,
   type BusinessListItem,
   type Defect,
+  type Vehicle,
   type VehicleDetail,
 } from "@/lib/types";
 
@@ -28,8 +29,11 @@ interface ShopOptions {
   options: BusinessListItem[];
 }
 
-/* Carrier profile fields, modeled after standard TMS truck exports. */
-function TruckDetails({ v, onSaved }: { v: import("@/lib/types").Vehicle; onSaved: () => void }) {
+type Tab = "overview" | "maintenance" | "defects" | "costs" | "history";
+
+/* ------------------------------------------------------------------ */
+
+function TruckDetails({ v, onSaved }: { v: Vehicle; onSaved: () => void }) {
   const [edit, setEdit] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -91,7 +95,7 @@ function TruckDetails({ v, onSaved }: { v: import("@/lib/types").Vehicle; onSave
   ];
 
   return (
-    <section className="card mt-4 p-5">
+    <section className="card p-5">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-lg font-bold">Truck details</h2>
         <button className="btn-quiet !py-1.5 text-sm" onClick={() => (edit ? setEdit(false) : openEdit())}>
@@ -100,18 +104,18 @@ function TruckDetails({ v, onSaved }: { v: import("@/lib/types").Vehicle; onSave
       </div>
       {!edit ? (
         <>
-          <dl className="mt-3 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-3">
+          <dl className="mt-4 grid gap-x-8 gap-y-3 text-sm sm:grid-cols-3">
             {rows.map(([label, value]) => (
               <div key={label}>
                 <dt className="text-steel">{label}</dt>
-                <dd className={`font-medium ${value ? "" : "text-faint"}`}>{value ?? "—"}</dd>
+                <dd className={`mt-0.5 font-medium ${value ? "" : "text-faint"}`}>{value ?? "—"}</dd>
               </div>
             ))}
           </dl>
-          {v.notes && <p className="mt-3 rounded-lg bg-mist/70 p-3 text-sm text-steel">{v.notes}</p>}
+          {v.notes && <p className="mt-4 rounded-lg bg-mist/70 p-3 text-sm text-steel">{v.notes}</p>}
         </>
       ) : (
-        <form onSubmit={save} className="mt-3 grid gap-3 sm:grid-cols-3">
+        <form onSubmit={save} className="mt-4 grid gap-3 sm:grid-cols-3">
           {([
             ["operator_name", "Operator (driver)"], ["mc_number", "MC / carrier"],
             ["license_plate", "Plate number"], ["state", "State"],
@@ -168,14 +172,20 @@ function TruckDetails({ v, onSaved }: { v: import("@/lib/types").Vehicle; onSave
   );
 }
 
+/* ------------------------------------------------------------------ */
+
 export default function VehiclePage() {
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
   const [d, setD] = useState<VehicleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<Tab>("overview");
   const [odo, setOdo] = useState("");
+  const [schedOpen, setSchedOpen] = useState(false);
   const [schedForm, setSchedForm] = useState({ title: "", miles: "", months: "" });
+  const [expOpen, setExpOpen] = useState(false);
   const [expForm, setExpForm] = useState({ category: "repair", description: "", amount: "" });
+  const [defOpen, setDefOpen] = useState(false);
   const [defForm, setDefForm] = useState({ type: "", comment: "" });
   const [options, setOptions] = useState<Record<string, ShopOptions | "loading">>({});
 
@@ -193,6 +203,8 @@ export default function VehiclePage() {
   if (!d) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>;
 
   const v = d.vehicle;
+  const openDefects = d.defects.filter((x) => x.status !== "resolved").length;
+  const dueCount = d.schedules.filter((s) => s.status === "due_soon" || s.status === "overdue").length;
 
   const post = (path: string, body: unknown) =>
     api(path, { method: "POST", body }).then(load).catch((e) => setError(e.message));
@@ -225,323 +237,450 @@ export default function VehiclePage() {
     }
   }
 
+  const TABS: [Tab, string, number | string | null][] = [
+    ["overview", "Overview", null],
+    ["maintenance", "Maintenance", dueCount || null],
+    ["defects", "PTI defects", openDefects || null],
+    ["costs", "Costs", v.expenses_total_cents ? fmtUsd(v.expenses_total_cents) : null],
+    ["history", "History", d.bookings.length || null],
+  ];
+
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-6">
       <Link href="/fleet" className="text-sm font-medium text-pine hover:underline">← Fleet</Link>
-      <div className="mt-2 flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-2xl font-bold">
-          Unit #{v.unit_number}
-          <span className="ml-3 text-lg font-medium text-steel">
-            {[v.year, v.make, v.model].filter(Boolean).join(" ")}
-          </span>
-        </h1>
-        <StatusBadge status={v.status} />
-      </div>
-      <p className="mt-1 text-sm text-steel">
-        {v.vin && <>VIN {v.vin} · </>}
-        {v.license_plate && <>Plate {v.license_plate} · </>}
-        {v.samsara_vehicle_id ? "Connected to Samsara" : "Not connected to Samsara"}
-        {v.last_location_at && v.last_lat != null && (
-          <>
-            {" · last seen "}
-            <a className="text-pine hover:underline" target="_blank" rel="noopener noreferrer"
-               href={`https://www.google.com/maps/search/?api=1&query=${v.last_lat},${v.last_lng}`}>
-              on the map
-            </a>{" "}
-            {new Date(v.last_location_at).toLocaleString()}
-          </>
-        )}
-      </p>
 
-      {v.warnings.length > 0 && (
-        <div className="mt-4 rounded-xl border border-danger/30 bg-danger-wash p-4">
-          <p className="font-semibold text-danger">Document warnings</p>
-          <ul className="mt-1 list-inside list-disc text-sm text-danger/90">
-            {v.warnings.map((w) => <li key={w}>{w}</li>)}
-          </ul>
-        </div>
-      )}
-
-      <TruckDetails v={v} onSaved={load} />
-
-      <div className="mt-6 grid gap-8 lg:grid-cols-2">
-        {/* Odometer + maintenance */}
-        <section>
-          <div className="card p-5">
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <p className="text-sm text-steel">Odometer</p>
-                <p className="display text-3xl font-bold">
-                  {v.odometer_miles != null ? `${Math.round(v.odometer_miles).toLocaleString()} mi` : "—"}
+      {/* Truck header: identity + odometer in one place */}
+      <div className="card mt-3 p-5">
+        <div className="flex flex-wrap items-start justify-between gap-x-8 gap-y-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="display text-3xl font-bold">#{v.unit_number}</h1>
+              <span className="text-lg text-steel">{[v.year, v.make, v.model].filter(Boolean).join(" ")}</span>
+              <StatusBadge status={v.status} />
+              {v.dispatch_status && (
+                <span className="rounded-full bg-mist px-2.5 py-0.5 text-xs font-semibold text-steel">
+                  {v.dispatch_status.replace("_", " ")}
+                </span>
+              )}
+            </div>
+            <p className="mt-1.5 text-sm text-steel">
+              {v.vin && <>VIN {v.vin} · </>}
+              {v.operator_name && <>{v.operator_name} · </>}
+              {v.samsara_vehicle_id ? "Samsara connected" : "Not connected to Samsara"}
+              {v.last_location_at && v.last_lat != null && (
+                <>
+                  {" · "}
+                  <a className="text-pine hover:underline" target="_blank" rel="noopener noreferrer"
+                     href={`https://www.google.com/maps/search/?api=1&query=${v.last_lat},${v.last_lng}`}>
+                    last seen on the map
+                  </a>
+                </>
+              )}
+            </p>
+          </div>
+          <div className="flex items-end gap-4">
+            <div className="text-right">
+              <p className="text-xs text-steel">Odometer</p>
+              <p className="display text-3xl font-bold leading-none tabular-nums">
+                {v.odometer_miles != null ? Math.round(v.odometer_miles).toLocaleString() : "—"}
+                <span className="ml-1 text-base font-semibold text-steel">mi</span>
+              </p>
+              {v.odometer_updated_at && (
+                <p className="mt-0.5 text-xs text-faint">
+                  {v.odometer_source === "samsara" ? "Samsara" : "Manual"} · {new Date(v.odometer_updated_at).toLocaleDateString()}
                 </p>
-                {v.odometer_updated_at && (
-                  <p className="text-xs text-faint">
-                    {v.odometer_source === "samsara" ? "From Samsara" : "Manual"} ·{" "}
-                    {new Date(v.odometer_updated_at).toLocaleString()}
-                  </p>
-                )}
+              )}
+            </div>
+            <form
+              className="flex gap-1.5"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (odo) void post(`/api/fleet/vehicles/${v.id}/odometer`, { odometer_miles: Number(odo) });
+                setOdo("");
+              }}
+            >
+              <input className="field !w-28 !py-2" inputMode="numeric" placeholder="New miles"
+                     value={odo} onChange={(e) => setOdo(e.target.value)} aria-label="New odometer reading" />
+              <button className="btn-quiet !px-3 !py-2">Update</button>
+            </form>
+          </div>
+        </div>
+        {v.warnings.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-danger-wash px-3 py-2.5">
+            <span className="text-sm font-bold text-danger">⚠ Warnings:</span>
+            {v.warnings.map((w) => (
+              <span key={w} className="rounded-full bg-panel px-2.5 py-0.5 text-xs font-medium text-danger">{w}</span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Tabs */}
+      <div className="mt-5 flex gap-1 overflow-x-auto border-b border-line" role="tablist">
+        {TABS.map(([key, label, badge]) => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={`flex shrink-0 items-center gap-2 rounded-t-lg px-4 py-2.5 text-[15px] font-semibold transition-colors ${
+              tab === key
+                ? "border-b-2 border-pine bg-panel text-pine"
+                : "text-steel hover:bg-panel/60 hover:text-ink"
+            }`}
+          >
+            {label}
+            {badge != null && (
+              <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${
+                key === "defects" || (key === "maintenance" && dueCount > 0)
+                  ? "bg-danger-wash text-danger" : "bg-mist text-steel"}`}>
+                {badge}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5 space-y-5">
+        {tab === "overview" && <TruckDetails v={v} onSaved={load} />}
+
+        {tab === "maintenance" && (
+          <section className="card p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">Maintenance plan</h2>
+                <p className="mt-0.5 text-sm text-steel">
+                  Set intervals by miles, months or both — YourFleet warns you before they're due.
+                </p>
               </div>
+              <button className="btn !py-2 text-sm" onClick={() => setSchedOpen(!schedOpen)}>
+                {schedOpen ? "Close" : "+ Add schedule"}
+              </button>
+            </div>
+            {schedOpen && (
               <form
-                className="flex gap-2"
+                className="mt-4 grid gap-3 rounded-lg border border-dashed border-line bg-mist/50 p-4 sm:grid-cols-[1fr_120px_120px_auto]"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  if (odo) void post(`/api/fleet/vehicles/${v.id}/odometer`, { odometer_miles: Number(odo) });
-                  setOdo("");
+                  void post(`/api/fleet/vehicles/${v.id}/schedules`, {
+                    title: schedForm.title,
+                    interval_miles: schedForm.miles ? Number(schedForm.miles) : null,
+                    interval_months: schedForm.months ? Number(schedForm.months) : null,
+                    last_done_miles: v.odometer_miles,
+                    last_done_at: new Date().toISOString(),
+                  });
+                  setSchedForm({ title: "", miles: "", months: "" });
+                  setSchedOpen(false);
                 }}
               >
-                <input className="field !w-32" inputMode="numeric" placeholder="New miles"
-                       value={odo} onChange={(e) => setOdo(e.target.value)} aria-label="New odometer reading" />
-                <button className="btn-quiet">Update</button>
+                <div>
+                  <label className="text-sm font-medium text-steel" htmlFor="sc-t">Service</label>
+                  <input id="sc-t" required className="field mt-1" placeholder="e.g. Oil change & PM"
+                         value={schedForm.title}
+                         onChange={(e) => setSchedForm({ ...schedForm, title: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-steel" htmlFor="sc-mi">Every (mi)</label>
+                  <input id="sc-mi" className="field mt-1" inputMode="numeric" placeholder="15000"
+                         value={schedForm.miles}
+                         onChange={(e) => setSchedForm({ ...schedForm, miles: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-steel" htmlFor="sc-mo">Every (months)</label>
+                  <input id="sc-mo" className="field mt-1" inputMode="numeric" placeholder="6"
+                         value={schedForm.months}
+                         onChange={(e) => setSchedForm({ ...schedForm, months: e.target.value })} />
+                </div>
+                <button className="btn self-end !py-2.5">Add</button>
               </form>
-            </div>
-          </div>
-
-          <h2 className="mt-6 text-lg font-bold">Maintenance plan</h2>
-          {d.schedules.length === 0 && (
-            <p className="mt-1 text-sm text-steel">
-              No schedules yet — add oil changes, PM services, DOT inspections below.
-            </p>
-          )}
-          <ul className="mt-2 space-y-2">
-            {d.schedules.map((s) => (
-              <li key={s.id} className="card p-4">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <p className="font-semibold">{s.title}</p>
-                  <span className={`rounded px-2 py-0.5 text-xs font-semibold ${SCHED_CLS[s.status]}`}>
-                    {s.status === "ok" ? "OK" : s.status === "due_soon" ? "Due soon" : s.status === "overdue" ? "Overdue" : "—"}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-sm text-steel">
-                  Every {[s.interval_miles && `${s.interval_miles.toLocaleString()} mi`,
-                          s.interval_months && `${s.interval_months} mo`].filter(Boolean).join(" / ")}
-                  {s.miles_left != null && ` · ${Math.round(s.miles_left).toLocaleString()} mi left`}
-                  {s.days_left != null && ` · ${Math.round(s.days_left)} days left`}
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {(s.status === "due_soon" || s.status === "overdue") && (
-                    <Link href="/search" className="btn !py-1 text-sm">Find a shop nearby</Link>
-                  )}
-                  <button className="btn-quiet !py-1 text-sm"
-                          onClick={() => post(`/api/fleet/schedules/${s.id}/done`, {})}>
-                    Mark done today
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-          <form
-            className="mt-3 grid grid-cols-[1fr_90px_90px_auto] gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void post(`/api/fleet/vehicles/${v.id}/schedules`, {
-                title: schedForm.title,
-                interval_miles: schedForm.miles ? Number(schedForm.miles) : null,
-                interval_months: schedForm.months ? Number(schedForm.months) : null,
-                last_done_miles: v.odometer_miles,
-                last_done_at: new Date().toISOString(),
-              });
-              setSchedForm({ title: "", miles: "", months: "" });
-            }}
-          >
-            <input required className="field" placeholder="e.g. Oil change" value={schedForm.title}
-                   onChange={(e) => setSchedForm({ ...schedForm, title: e.target.value })} aria-label="Schedule title" />
-            <input className="field" inputMode="numeric" placeholder="mi" value={schedForm.miles}
-                   onChange={(e) => setSchedForm({ ...schedForm, miles: e.target.value })} aria-label="Interval miles" />
-            <input className="field" inputMode="numeric" placeholder="mo" value={schedForm.months}
-                   onChange={(e) => setSchedForm({ ...schedForm, months: e.target.value })} aria-label="Interval months" />
-            <button className="btn-quiet">Add</button>
-          </form>
-        </section>
-
-        {/* Defects */}
-        <section>
-          <h2 className="text-lg font-bold">PTI / inspection defects</h2>
-          <p className="mt-1 text-sm text-steel">
-            Defects from pre-trip inspections. With Samsara connected, DVIR defects land here
-            automatically; the system then finds nearby shops with prices for the fix.
-          </p>
-          <ul className="mt-2 space-y-2">
-            {d.defects.map((def) => {
-              const opt = options[def.id];
-              return (
-                <li key={def.id} className="card p-4">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className="font-semibold">{def.defect_type}</p>
-                    <StatusBadge status={def.status} />
-                  </div>
-                  {def.comment && <p className="mt-0.5 text-sm text-steel">{def.comment}</p>}
-                  <p className="mt-0.5 text-xs text-faint">
-                    {def.source === "samsara_dvir" ? "From Samsara DVIR" : "Manual"} ·{" "}
-                    {new Date(def.reported_at).toLocaleDateString()}
-                  </p>
-                  {def.status === "open" && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <button className="btn !py-1 text-sm" onClick={() => void findShops(def)}>
-                        Find shops & prices
-                      </button>
-                      <button className="btn-quiet !py-1 text-sm"
-                              onClick={() => post(`/api/fleet/defects/${def.id}/resolve`, {})}>
-                        Resolved elsewhere
-                      </button>
+            )}
+            {d.schedules.length === 0 && !schedOpen ? (
+              <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-6 text-center text-sm text-steel">
+                No schedules yet — add oil changes, PM services, DOT inspections.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y divide-line/70">
+                {d.schedules.map((s) => (
+                  <li key={s.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold">{s.title}</p>
+                      <p className="mt-0.5 text-sm text-steel">
+                        Every {[s.interval_miles && `${s.interval_miles.toLocaleString()} mi`,
+                                s.interval_months && `${s.interval_months} mo`].filter(Boolean).join(" / ")}
+                        {s.miles_left != null && ` · ${Math.round(s.miles_left).toLocaleString()} mi left`}
+                        {s.days_left != null && ` · ${Math.round(s.days_left)} days left`}
+                      </p>
                     </div>
-                  )}
-                  {def.booking_id && (
-                    <Link href={`/bookings/${def.booking_id}`}
-                          className="mt-2 inline-block text-sm font-medium text-pine hover:underline">
-                      View repair request
-                    </Link>
-                  )}
-                  {opt === "loading" ? (
-                    <p className="mt-2 text-sm text-steel">Finding shops…</p>
-                  ) : opt ? (
-                    <div className="mt-3 border-t border-line pt-2">
-                      {opt.options.length === 0 ? (
-                        <p className="text-sm text-steel">
-                          No shops with a published price for this service nearby yet — try the
-                          general <Link className="text-pine underline" href="/search">search</Link>.
-                        </p>
-                      ) : (
-                        <ul className="space-y-1.5">
-                          {opt.options.slice(0, 5).map((o) => (
-                            <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                              <span>
-                                <Link href={`/business/${o.id}?vehicle=${v.id}&defect=${def.id}&issue=${encodeURIComponent(`PTI defect: ${def.defect_type}${def.comment ? ` — ${def.comment}` : ""}`)}`}
-                                      className="font-medium text-pine hover:underline">
-                                  {o.name}
-                                </Link>
-                                {o.distance_miles != null && <span className="text-steel"> · {o.distance_miles} mi</span>}
-                              </span>
-                              <span className="font-semibold">
-                                {o.service_price_cents != null ? `from ${fmtUsd(o.service_price_cents)}` : "quote"}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                    </div>
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-          <form
-            className="mt-3 grid grid-cols-[1fr_1.4fr_auto] gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void post(`/api/fleet/vehicles/${v.id}/defects`, {
-                defect_type: defForm.type, comment: defForm.comment || null,
-              });
-              setDefForm({ type: "", comment: "" });
-            }}
-          >
-            <input required className="field" placeholder="e.g. tire, brakes" value={defForm.type}
-                   onChange={(e) => setDefForm({ ...defForm, type: e.target.value })} aria-label="Defect type" />
-            <input className="field" placeholder="Details (optional)" value={defForm.comment}
-                   onChange={(e) => setDefForm({ ...defForm, comment: e.target.value })} aria-label="Defect details" />
-            <button className="btn-quiet">Report</button>
-          </form>
-
-          <h2 className="mt-8 text-lg font-bold">Repair history</h2>
-          {d.bookings.length === 0 ? (
-            <p className="mt-1 text-sm text-steel">No marketplace repairs for this truck yet.</p>
-          ) : (
-            <ul className="mt-2 divide-y divide-line card">
-              {d.bookings.map((b) => (
-                <li key={b.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5">
-                  <Link href={`/bookings/${b.id}`} className="text-sm font-medium hover:text-pine hover:underline">
-                    {b.issue_description.slice(0, 60)}{b.issue_description.length > 60 ? "…" : ""}
-                  </Link>
-                  <span className="flex items-center gap-2 text-sm">
-                    {b.final_price_cents != null && <span className="font-semibold">{fmtUsd(b.final_price_cents)}</span>}
-                    <StatusBadge status={b.status} />
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      </div>
-
-      {/* Expenses ledger */}
-      <section className="mt-10">
-        <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h2 className="text-lg font-bold">Cost ledger</h2>
-          <p className="text-sm text-steel">
-            Total: <span className="display text-lg font-bold text-ink">{fmtUsd(v.expenses_total_cents)}</span>
-          </p>
-        </div>
-        {Object.keys(d.expenses_by_category).length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-2">
-            {Object.entries(d.expenses_by_category).map(([cat, cents]) => (
-              <span key={cat} className="rounded bg-mist px-2 py-1 text-sm">
-                {EXPENSE_LABELS[cat] ?? cat}: <strong>{fmtUsd(cents)}</strong>
-              </span>
-            ))}
-          </div>
-        )}
-        <form
-          className="mt-3 grid grid-cols-[150px_1fr_120px_auto] gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void post(`/api/fleet/vehicles/${v.id}/expenses`, {
-              category: expForm.category,
-              description: expForm.description,
-              amount_cents: Math.round(Number(expForm.amount) * 100),
-              odometer_miles: v.odometer_miles,
-            });
-            setExpForm({ category: "repair", description: "", amount: "" });
-          }}
-        >
-          <select className="field" value={expForm.category} aria-label="Expense category"
-                  onChange={(e) => setExpForm({ ...expForm, category: e.target.value })}>
-            {Object.entries(EXPENSE_LABELS).map(([val, label]) => (
-              <option key={val} value={val}>{label}</option>
-            ))}
-          </select>
-          <input required className="field" placeholder="What was it? (receipt line)" value={expForm.description}
-                 onChange={(e) => setExpForm({ ...expForm, description: e.target.value })} aria-label="Expense description" />
-          <input required className="field" inputMode="decimal" placeholder="$ amount" value={expForm.amount}
-                 onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} aria-label="Expense amount" />
-          <button className="btn-quiet">Add</button>
-        </form>
-        {d.expenses.length === 0 ? (
-          <p className="mt-3 text-sm text-steel">
-            No costs recorded. Completed marketplace repairs appear here automatically.
-          </p>
-        ) : (
-          <table className="mt-3 w-full border-collapse text-sm">
-            <thead>
-              <tr className="border-b border-line text-left text-steel">
-                <th className="py-1.5 pr-3 font-medium">Date</th>
-                <th className="py-1.5 pr-3 font-medium">Category</th>
-                <th className="py-1.5 pr-3 font-medium">Description</th>
-                <th className="py-1.5 pr-3 font-medium">Odometer</th>
-                <th className="py-1.5 text-right font-medium">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {d.expenses.map((e) => (
-                <tr key={e.id} className="border-b border-line">
-                  <td className="py-1.5 pr-3 text-steel">{new Date(e.incurred_at).toLocaleDateString()}</td>
-                  <td className="py-1.5 pr-3">{EXPENSE_LABELS[e.category] ?? e.category}</td>
-                  <td className="py-1.5 pr-3">
-                    {e.description}
-                    {e.booking_id && (
-                      <Link href={`/bookings/${e.booking_id}`} className="ml-1.5 text-xs font-medium text-pine hover:underline">
-                        booking
-                      </Link>
+                    <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${SCHED_CLS[s.status]}`}>
+                      {s.status === "ok" ? "OK" : s.status === "due_soon" ? "Due soon" : s.status === "overdue" ? "Overdue" : "—"}
+                    </span>
+                    {(s.status === "due_soon" || s.status === "overdue") && (
+                      <Link href="/search" className="btn !py-1.5 text-sm">Find a shop</Link>
                     )}
-                  </td>
-                  <td className="py-1.5 pr-3 text-steel">
-                    {e.odometer_miles != null ? `${Math.round(e.odometer_miles).toLocaleString()} mi` : "—"}
-                  </td>
-                  <td className="py-1.5 text-right font-semibold">{fmtUsd(e.amount_cents)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <button className="btn-quiet !py-1.5 text-sm"
+                            onClick={() => post(`/api/fleet/schedules/${s.id}/done`, {})}>
+                      Mark done
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
         )}
-      </section>
+
+        {tab === "defects" && (
+          <section className="card p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">PTI / inspection defects</h2>
+                <p className="mt-0.5 text-sm text-steel">
+                  With Samsara connected, DVIR defects land here automatically; the system then
+                  finds nearby shops with prices for the fix.
+                </p>
+              </div>
+              <button className="btn !py-2 text-sm" onClick={() => setDefOpen(!defOpen)}>
+                {defOpen ? "Close" : "+ Report defect"}
+              </button>
+            </div>
+            {defOpen && (
+              <form
+                className="mt-4 grid gap-3 rounded-lg border border-dashed border-line bg-mist/50 p-4 sm:grid-cols-[200px_1fr_auto]"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void post(`/api/fleet/vehicles/${v.id}/defects`, {
+                    defect_type: defForm.type, comment: defForm.comment || null,
+                  });
+                  setDefForm({ type: "", comment: "" });
+                  setDefOpen(false);
+                }}
+              >
+                <div>
+                  <label className="text-sm font-medium text-steel" htmlFor="df-t">What&apos;s wrong</label>
+                  <input id="df-t" required className="field mt-1" placeholder="e.g. tire, brakes"
+                         value={defForm.type}
+                         onChange={(e) => setDefForm({ ...defForm, type: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-steel" htmlFor="df-c">Details (optional)</label>
+                  <input id="df-c" className="field mt-1" value={defForm.comment}
+                         onChange={(e) => setDefForm({ ...defForm, comment: e.target.value })} />
+                </div>
+                <button className="btn self-end !py-2.5">Report</button>
+              </form>
+            )}
+            {d.defects.length === 0 && !defOpen ? (
+              <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-6 text-center text-sm text-steel">
+                No defects reported. That&apos;s how we like it.
+              </p>
+            ) : (
+              <ul className="mt-4 space-y-3">
+                {d.defects.map((def) => {
+                  const opt = options[def.id];
+                  return (
+                    <li key={def.id} className="rounded-xl border border-line/70 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <p className="font-semibold">{def.defect_type}</p>
+                        <StatusBadge status={def.status} />
+                      </div>
+                      {def.comment && <p className="mt-0.5 text-sm text-steel">{def.comment}</p>}
+                      <p className="mt-0.5 text-xs text-faint">
+                        {def.source === "samsara_dvir" ? "From Samsara DVIR" : "Manual"} ·{" "}
+                        {new Date(def.reported_at).toLocaleDateString()}
+                      </p>
+                      {def.status === "open" && (
+                        <div className="mt-2.5 flex flex-wrap gap-2">
+                          <button className="btn !py-1.5 text-sm" onClick={() => void findShops(def)}>
+                            Find shops & prices
+                          </button>
+                          <button className="btn-quiet !py-1.5 text-sm"
+                                  onClick={() => post(`/api/fleet/defects/${def.id}/resolve`, {})}>
+                            Resolved elsewhere
+                          </button>
+                        </div>
+                      )}
+                      {def.booking_id && (
+                        <Link href={`/bookings/${def.booking_id}`}
+                              className="mt-2 inline-block text-sm font-medium text-pine hover:underline">
+                          View repair request
+                        </Link>
+                      )}
+                      {opt === "loading" ? (
+                        <p className="mt-3 text-sm text-steel">Finding shops…</p>
+                      ) : opt ? (
+                        <div className="mt-3 rounded-lg bg-mist/60 p-3">
+                          {opt.options.length === 0 ? (
+                            <p className="text-sm text-steel">
+                              No shops with a published price for this service nearby yet — try the
+                              general <Link className="text-pine underline" href="/search">search</Link>.
+                            </p>
+                          ) : (
+                            <ul className="space-y-1.5">
+                              {opt.options.slice(0, 5).map((o) => (
+                                <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                  <span>
+                                    <Link href={`/business/${o.id}?vehicle=${v.id}&defect=${def.id}&issue=${encodeURIComponent(`PTI defect: ${def.defect_type}${def.comment ? ` — ${def.comment}` : ""}`)}`}
+                                          className="font-medium text-pine hover:underline">
+                                      {o.name}
+                                    </Link>
+                                    {o.distance_miles != null && <span className="text-steel"> · {o.distance_miles} mi</span>}
+                                  </span>
+                                  <span className="font-semibold">
+                                    {o.service_price_cents != null ? `from ${fmtUsd(o.service_price_cents)}` : "quote"}
+                                  </span>
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {tab === "costs" && (
+          <section className="card p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-bold">Cost ledger</h2>
+                <p className="mt-0.5 text-sm text-steel">
+                  Completed marketplace repairs land here automatically.
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="display text-xl font-bold">{fmtUsd(v.expenses_total_cents)}</span>
+                <button className="btn !py-2 text-sm" onClick={() => setExpOpen(!expOpen)}>
+                  {expOpen ? "Close" : "+ Add expense"}
+                </button>
+              </div>
+            </div>
+            {Object.keys(d.expenses_by_category).length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {Object.entries(d.expenses_by_category).map(([cat, cents]) => (
+                  <span key={cat} className="rounded-full bg-mist px-3 py-1 text-sm">
+                    {EXPENSE_LABELS[cat] ?? cat}: <strong>{fmtUsd(cents)}</strong>
+                  </span>
+                ))}
+              </div>
+            )}
+            {expOpen && (
+              <form
+                className="mt-4 grid gap-3 rounded-lg border border-dashed border-line bg-mist/50 p-4 sm:grid-cols-[150px_1fr_130px_auto]"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void post(`/api/fleet/vehicles/${v.id}/expenses`, {
+                    category: expForm.category,
+                    description: expForm.description,
+                    amount_cents: Math.round(Number(expForm.amount) * 100),
+                    odometer_miles: v.odometer_miles,
+                  });
+                  setExpForm({ category: "repair", description: "", amount: "" });
+                  setExpOpen(false);
+                }}
+              >
+                <div>
+                  <label className="text-sm font-medium text-steel" htmlFor="ex-c">Category</label>
+                  <select id="ex-c" className="field mt-1" value={expForm.category}
+                          onChange={(e) => setExpForm({ ...expForm, category: e.target.value })}>
+                    {Object.entries(EXPENSE_LABELS).map(([val, label]) => (
+                      <option key={val} value={val}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-steel" htmlFor="ex-d">Description</label>
+                  <input id="ex-d" required className="field mt-1" placeholder="What was it? (receipt line)"
+                         value={expForm.description}
+                         onChange={(e) => setExpForm({ ...expForm, description: e.target.value })} />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-steel" htmlFor="ex-a">Amount ($)</label>
+                  <input id="ex-a" required className="field mt-1" inputMode="decimal" placeholder="450.00"
+                         value={expForm.amount}
+                         onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} />
+                </div>
+                <button className="btn self-end !py-2.5">Add</button>
+              </form>
+            )}
+            {d.expenses.length === 0 ? (
+              <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-6 text-center text-sm text-steel">
+                No costs recorded yet.
+              </p>
+            ) : (
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left text-steel">
+                      <th className="py-2 pr-3 font-medium">Date</th>
+                      <th className="py-2 pr-3 font-medium">Category</th>
+                      <th className="py-2 pr-3 font-medium">Description</th>
+                      <th className="py-2 pr-3 font-medium">Odometer</th>
+                      <th className="py-2 text-right font-medium">Amount</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {d.expenses.map((e) => (
+                      <tr key={e.id} className="border-b border-line/60 transition-colors hover:bg-mist/60">
+                        <td className="py-2.5 pr-3 text-steel">{new Date(e.incurred_at).toLocaleDateString()}</td>
+                        <td className="py-2.5 pr-3">
+                          <span className="rounded-full bg-mist px-2 py-0.5 text-xs font-medium">
+                            {EXPENSE_LABELS[e.category] ?? e.category}
+                          </span>
+                        </td>
+                        <td className="py-2.5 pr-3">
+                          {e.description}
+                          {e.booking_id && (
+                            <Link href={`/bookings/${e.booking_id}`} className="ml-1.5 text-xs font-medium text-pine hover:underline">
+                              booking
+                            </Link>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-3 text-steel">
+                          {e.odometer_miles != null ? `${Math.round(e.odometer_miles).toLocaleString()} mi` : "—"}
+                        </td>
+                        <td className="py-2.5 text-right font-semibold tabular-nums">{fmtUsd(e.amount_cents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+        )}
+
+        {tab === "history" && (
+          <section className="card p-5">
+            <h2 className="text-lg font-bold">Repair history</h2>
+            <p className="mt-0.5 text-sm text-steel">Marketplace repair requests for this truck.</p>
+            {d.bookings.length === 0 ? (
+              <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-6 text-center text-sm text-steel">
+                No marketplace repairs yet. Open a PTI defect and hit “Find shops & prices”,
+                or <Link href="/search" className="text-pine underline">find a shop</Link> directly.
+              </p>
+            ) : (
+              <ul className="mt-4 divide-y divide-line/70">
+                {d.bookings.map((b) => (
+                  <li key={b.id}>
+                    <Link href={`/bookings/${b.id}`}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-2 py-3 transition-colors hover:bg-mist">
+                      <span className="text-sm font-medium">
+                        {b.issue_description.slice(0, 70)}{b.issue_description.length > 70 ? "…" : ""}
+                      </span>
+                      <span className="flex items-center gap-2 text-sm">
+                        {b.final_price_cents != null && <span className="font-semibold">{fmtUsd(b.final_price_cents)}</span>}
+                        <StatusBadge status={b.status} />
+                      </span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+      </div>
     </div>
   );
 }
