@@ -163,6 +163,36 @@ h1, h2, h3, .display {
 .hero-rise { animation: hero-rise 0.5s ease-out both; }
 .hero-rise-2 { animation: hero-rise 0.5s ease-out 0.12s both; }
 
+/* Scroll reveal: elements fade/rise once as they enter the viewport. */
+.reveal {
+  opacity: 0;
+  transform: translateY(16px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.reveal.in {
+  opacity: 1;
+  transform: none;
+}
+
+/* Signature hero moment: a semi drives across the road line. Transform-only,
+   GPU-composited, disabled under prefers-reduced-motion by the global rule. */
+@keyframes drive-across {
+  from { transform: translateX(-180px); }
+  to { transform: translateX(calc(100vw + 40px)); }
+}
+.drive {
+  animation: drive-across 26s linear infinite;
+  will-change: transform;
+}
+
+/* Media hover zoom (cards) */
+.zoom-media img {
+  transition: transform 0.45s ease;
+}
+.zoom-media:hover img {
+  transform: scale(1.05);
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

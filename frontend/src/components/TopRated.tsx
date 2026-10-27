@@ -103,7 +103,7 @@ export function TopRated() {
             <Link
               key={b.id}
               href={`/business/${b.id}`}
-              className="group w-[240px] shrink-0 snap-start overflow-hidden card transition-[border-color,box-shadow] hover:border-pine hover:shadow-[0_2px_12px_rgb(23_82_53/0.14)] sm:w-auto"
+              className="group zoom-media w-[240px] shrink-0 snap-start overflow-hidden card transition-[border-color,box-shadow,transform] hover:-translate-y-0.5 hover:border-pine/50 hover:shadow-(--shadow-lift) sm:w-auto"
             >
               <ShopImage
                 businessId={b.id}
