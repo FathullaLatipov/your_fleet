@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
+import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { BusinessDetail } from "@/lib/types";
@@ -25,7 +26,7 @@ function ClaimInner() {
     }
   }, [businessId]);
 
-  if (loading) return <p className="mx-auto max-w-xl px-4 py-10 text-steel">Loading…</p>;
+  if (loading) return <Loader />;
   if (!user || user.role !== "provider") {
     return (
       <div className="mx-auto max-w-xl px-4 py-16">

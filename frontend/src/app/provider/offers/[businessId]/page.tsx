@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { StatusBadge } from "@/components/badges";
+import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmtUsd, type BusinessDetail, type Offer } from "@/lib/types";
@@ -33,7 +34,7 @@ export default function ProviderOffersPage() {
     if (user) load();
   }, [user, load]);
 
-  if (loading) return <p className="mx-auto max-w-2xl px-4 py-10 text-steel">Loading…</p>;
+  if (loading) return <Loader />;
   if (!user || user.role !== "provider") {
     return <p className="mx-auto max-w-2xl px-4 py-10 text-steel">This page is for shop accounts.</p>;
   }

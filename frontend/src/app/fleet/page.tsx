@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmtUsd, type Vehicle } from "@/lib/types";
@@ -39,7 +40,7 @@ export default function FleetPage() {
     if (user) load();
   }, [user, load]);
 
-  if (loading) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>;
+  if (loading) return <Loader />;
   if (!user || (user.role !== "driver" && user.role !== "fleet_manager")) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-16">
@@ -169,7 +170,7 @@ export default function FleetPage() {
       )}
 
       {vehicles === null ? (
-        <p className="mt-6 text-steel">Loading…</p>
+        <Loader />
       ) : vehicles.length === 0 ? (
         <div className="mt-6 card p-6">
           <p className="font-semibold">No trucks yet.</p>

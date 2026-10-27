@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { StatusBadge } from "@/components/badges";
+import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmtUsd, type Booking, type BookingStatus, type BusinessDetail } from "@/lib/types";
@@ -96,7 +97,7 @@ export default function BookingPage() {
 
   if (!user) return <p className="mx-auto max-w-3xl px-4 py-10 text-steel">Sign in to view this booking.</p>;
   if (error) return <p className="mx-auto max-w-3xl px-4 py-10 font-medium text-danger">{error}</p>;
-  if (!booking) return <p className="mx-auto max-w-3xl px-4 py-10 text-steel">Loading…</p>;
+  if (!booking) return <Loader />;
 
   const kind: "driver" | "provider" | "admin" =
     user.role === "admin" ? "admin" : booking.driver_id === user.id ? "driver" : "provider";

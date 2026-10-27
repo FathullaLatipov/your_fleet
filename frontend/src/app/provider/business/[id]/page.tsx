@@ -3,6 +3,7 @@
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { mediaUrl, type BusinessDetail, type BusinessPhoto } from "@/lib/types";
@@ -58,7 +59,7 @@ export default function EditBusinessPage() {
     }).catch((e) => setMsg({ kind: "err", text: e.message }));
   }, [id]);
 
-  if (loading || !b) return <p className="mx-auto max-w-2xl px-4 py-10 text-steel">Loading…</p>;
+  if (loading || !b) return <Loader />;
   if (!user) return <p className="mx-auto max-w-2xl px-4 py-10 text-steel">Sign in first.</p>;
 
   function parseHours(): Record<string, [string, string][]> | null {

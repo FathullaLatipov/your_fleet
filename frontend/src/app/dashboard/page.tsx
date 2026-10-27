@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { StatusBadge, Stars, TrustBadges } from "@/components/badges";
+import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { Booking, BusinessListItem, Notification, Vehicle } from "@/lib/types";
@@ -105,7 +106,7 @@ export default function DriverDashboard() {
     api<Vehicle[]>("/api/fleet/vehicles").then(setVehicles).catch(() => {});
   }, [user]);
 
-  if (loading) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>;
+  if (loading) return <Loader />;
   if (!user) {
     return (
       <div className="mx-auto max-w-5xl px-4 py-16">

@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useEffect, useState } from "react";
 
 import { GoogleRating, Stars, TrustBadges } from "@/components/badges";
+import { Loader } from "@/components/Loader";
 import { ShopImage } from "@/components/ShopImage";
 import { api } from "@/lib/api";
 import { openStatus } from "@/lib/hours";
@@ -255,7 +256,7 @@ function SearchPageInner() {
           className={`min-h-0 flex-1 overflow-y-auto bg-mist lg:max-w-[580px] lg:border-r lg:border-line ${showMap ? "hidden lg:block" : ""}`}
         >
           {loading ? (
-            <p className="p-6 text-steel">Searching…</p>
+            <Loader label="Searching" className="min-h-[30vh]" />
           ) : error ? (
             <div className="p-6">
               <p className="font-semibold text-danger">{error}</p>
@@ -377,7 +378,7 @@ function SearchPageInner() {
 
 export default function SearchPage() {
   return (
-    <Suspense fallback={<p className="p-6 text-steel">Loading…</p>}>
+    <Suspense fallback={<Loader />}>
       <SearchPageInner />
     </Suspense>
   );

@@ -6,6 +6,7 @@ import { useParams, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { BookingForm } from "@/components/BookingForm";
+import { Loader } from "@/components/Loader";
 import { ShopCover } from "@/components/ShopCover";
 import { ShopImage } from "@/components/ShopImage";
 import { Stars, TrustBadges } from "@/components/badges";
@@ -127,7 +128,7 @@ function BusinessPageInner() {
       </div>
     );
   }
-  if (!b) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>;
+  if (!b) return <Loader />;
 
   const directions = `https://www.google.com/maps/dir/?api=1&destination=${b.lat},${b.lng}`;
   const googleUrl =
@@ -150,8 +151,10 @@ function BusinessPageInner() {
           <img src={mediaUrl(b.photos[0].path)} alt={`${b.name} photo`}
                className="absolute inset-0 h-full w-full object-cover" />
         ) : (
-          <ShopImage name={b.name} category={b.category} attribution
-                     className="absolute inset-0" />
+          <div className="absolute inset-0">
+            <ShopImage name={b.name} category={b.category} attribution
+                       className="h-full w-full" />
+          </div>
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-charcoal/90 via-charcoal/30 to-transparent" />
         <div className="absolute inset-x-0 bottom-0 p-5 sm:p-6">
@@ -543,7 +546,7 @@ function BusinessPageInner() {
 
 export default function BusinessPage() {
   return (
-    <Suspense fallback={<p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>}>
+    <Suspense fallback={<Loader />}>
       <BusinessPageInner />
     </Suspense>
   );

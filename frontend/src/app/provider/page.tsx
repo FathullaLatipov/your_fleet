@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { StatusBadge } from "@/components/badges";
+import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { fmtUsd, type Booking, type BusinessListItem, type Claim, type Offer } from "@/lib/types";
@@ -37,7 +38,7 @@ export default function ProviderDashboard() {
     }).catch(() => {});
   }, [user]);
 
-  if (loading) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>;
+  if (loading) return <Loader />;
   if (!user || user.role !== "provider") {
     return (
       <div className="mx-auto max-w-5xl px-4 py-16">

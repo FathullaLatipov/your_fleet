@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { StatusBadge } from "@/components/badges";
+import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
@@ -230,10 +231,10 @@ export default function VehiclePage() {
     if (user) load();
   }, [user, load]);
 
-  if (loading) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>;
+  if (loading) return <Loader />;
   if (!user) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Sign in to view your fleet.</p>;
   if (error) return <p className="mx-auto max-w-5xl px-4 py-10 font-medium text-danger">{error}</p>;
-  if (!d) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Loading…</p>;
+  if (!d) return <Loader />;
 
   const v = d.vehicle;
   const openDefects = d.defects.filter((x) => x.status !== "resolved").length;
