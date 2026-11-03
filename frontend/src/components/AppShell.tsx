@@ -222,7 +222,6 @@ export function AppShell({ title, children }: { title: string; children: React.R
     { label: "Insights", items: [{ href: "/analytics", label: "Analytics", icon: "chart" }] },
   ];
   const siteItems: NavItem[] = [{ href: "/search", label: "Find repair", icon: "search" }];
-  if (user.role === "provider") siteItems.push({ href: "/for-shops", label: "For shops", icon: "shop" });
   const allItems = [...groups.flatMap((g) => g.items), ...siteItems];
 
   const today = new Date().toLocaleDateString("en-US", {
