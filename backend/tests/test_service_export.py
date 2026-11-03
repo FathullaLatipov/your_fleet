@@ -53,6 +53,21 @@ class TestServiceExport:
         text = "\n".join(str(c.value) for row in ws.iter_rows() for c in row if c.value)
         assert "Recent brake job" in text and "Old tire job" not in text
 
+    def test_single_record_export_by_expense_id(self, client, db):
+        h = seed(client, db, "exp-fleet5@example.com")
+        rows = client.get("/api/fleet/service-records", headers=h).json()
+        target = next(r for r in rows if r["description"] == "Recent brake job")
+        assert target["expense_id"] is not None
+        r = client.get("/api/fleet/service-records/export", headers=h,
+                       params={"format": "xlsx", "expense_id": target["expense_id"]})
+        assert r.status_code == 200
+        import io
+
+        import openpyxl
+        ws = openpyxl.load_workbook(io.BytesIO(r.content)).active
+        text = "\n".join(str(c.value) for row in ws.iter_rows() for c in row if c.value)
+        assert "Recent brake job" in text and "Old tire job" not in text
+
     def test_bad_format_rejected(self, client, db):
         h = seed(client, db, "exp-fleet4@example.com")
         assert client.get("/api/fleet/service-records/export", headers=h,

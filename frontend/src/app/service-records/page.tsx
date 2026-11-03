@@ -20,6 +20,7 @@ interface ServiceRecord {
   amount_cents: number | null;
   odometer_miles: number | null;
   booking_id: string | null;
+  expense_id: string | null;
   shop_name: string | null;
 }
 
@@ -40,17 +41,29 @@ function ServiceRecordsInner() {
   const [error, setError] = useState<string | null>(null);
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
-  const [exporting, setExporting] = useState<"" | "xlsx" | "pdf">("");
+  const [exporting, setExporting] = useState<string>("");
   const [exportError, setExportError] = useState<string | null>(null);
 
-  async function download(format: "xlsx" | "pdf") {
-    setExporting(format);
+  async function download(
+    format: "xlsx" | "pdf",
+    single?: { booking_id?: string | null; expense_id?: string | null },
+  ) {
+    const key = single
+      ? `${single.booking_id ?? single.expense_id}:${format}`
+      : format;
+    setExporting(key);
     setExportError(null);
     try {
       const qs = new URLSearchParams({ format });
-      if (vehicleId) qs.set("vehicle_id", vehicleId);
-      if (dateFrom) qs.set("date_from", dateFrom);
-      if (dateTo) qs.set("date_to", dateTo);
+      if (single?.booking_id) {
+        qs.set("booking_id", single.booking_id);
+      } else if (single?.expense_id) {
+        qs.set("expense_id", single.expense_id);
+      } else {
+        if (vehicleId) qs.set("vehicle_id", vehicleId);
+        if (dateFrom) qs.set("date_from", dateFrom);
+        if (dateTo) qs.set("date_to", dateTo);
+      }
       let auth: Record<string, string> = {};
       try {
         const t = localStorage.getItem("yf_token");
@@ -205,6 +218,24 @@ function ServiceRecordsInner() {
                       {r.odometer_miles != null ? `${Math.round(r.odometer_miles).toLocaleString()} mi` : "—"}
                     </td>
                     <td className="py-2.5 text-right font-semibold tabular-nums">{fmtUsd(r.amount_cents)}</td>
+                    <td className="py-2.5 pl-3 text-right">
+                      <span className="inline-flex gap-1">
+                        {(["xlsx", "pdf"] as const).map((f) => {
+                          const key = `${r.booking_id ?? r.expense_id}:${f}`;
+                          return (
+                            <button
+                              key={f}
+                              disabled={exporting !== ""}
+                              onClick={() => void download(f, r)}
+                              title={`Download this record as ${f.toUpperCase()}`}
+                              className="rounded border border-line px-1.5 py-0.5 text-[11px] font-semibold text-steel transition-colors hover:border-pine/50 hover:text-pine disabled:opacity-50"
+                            >
+                              {exporting === key ? "…" : f.toUpperCase()}
+                            </button>
+                          );
+                        })}
+                      </span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -214,6 +245,7 @@ function ServiceRecordsInner() {
                     {records.length} record{records.length === 1 ? "" : "s"}
                   </td>
                   <td className="py-2.5 text-right font-bold tabular-nums">{fmtUsd(total)}</td>
+                  <td />
                 </tr>
               </tfoot>
             </table>

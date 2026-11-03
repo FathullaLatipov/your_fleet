@@ -433,6 +433,7 @@ def _collect_service_records(
             "amount_cents": b.final_price_cents,
             "odometer_miles": None,
             "booking_id": str(b.id),
+            "expense_id": None,
             "shop_name": biz_names.get(b.business_id),
         })
 
@@ -459,6 +460,7 @@ def _collect_service_records(
                 "amount_cents": e.amount_cents,
                 "odometer_miles": e.odometer_miles,
                 "booking_id": None,
+                "expense_id": str(e.id),
                 "shop_name": None,
             })
 
@@ -478,6 +480,8 @@ def service_records_export(
     vehicle_id: uuid.UUID | None = Query(default=None),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
+    booking_id: uuid.UUID | None = Query(default=None),
+    expense_id: uuid.UUID | None = Query(default=None),
     user: User = Depends(fleet_user),
     db: Session = Depends(get_db),
 ):
@@ -493,6 +497,11 @@ def service_records_export(
         date_to = date_to.replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
 
     records = _collect_service_records(db, user, vehicle_id, date_from, date_to)
+    # Single-record download ("receipt" for one line of the history).
+    if booking_id is not None:
+        records = [r for r in records if r.get("booking_id") == str(booking_id)]
+    if expense_id is not None:
+        records = [r for r in records if r.get("expense_id") == str(expense_id)]
     period = (
         f"{date_from.date().isoformat() if date_from else 'start'}"
         f"_{date_to.date().isoformat() if date_to else 'today'}"
