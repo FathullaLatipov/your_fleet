@@ -28,12 +28,53 @@ interface VehicleOpt {
   unit_number: string;
 }
 
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+
 function ServiceRecordsInner() {
   const { user } = useAuth();
   const [records, setRecords] = useState<ServiceRecord[] | null>(null);
   const [vehicles, setVehicles] = useState<VehicleOpt[]>([]);
   const [vehicleId, setVehicleId] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [exporting, setExporting] = useState<"" | "xlsx" | "pdf">("");
+  const [exportError, setExportError] = useState<string | null>(null);
+
+  async function download(format: "xlsx" | "pdf") {
+    setExporting(format);
+    setExportError(null);
+    try {
+      const qs = new URLSearchParams({ format });
+      if (vehicleId) qs.set("vehicle_id", vehicleId);
+      if (dateFrom) qs.set("date_from", dateFrom);
+      if (dateTo) qs.set("date_to", dateTo);
+      let auth: Record<string, string> = {};
+      try {
+        const t = localStorage.getItem("yf_token");
+        if (t) auth = { Authorization: `Bearer ${t}` };
+      } catch { /* ignore */ }
+      const res = await fetch(`${API_URL}/api/fleet/service-records/export?${qs}`, { headers: auth });
+      if (!res.ok) throw new Error(`Export failed (${res.status})`);
+      const blob = await res.blob();
+      const name = res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1]
+        ?? `service-records.${format}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting("");
+    }
+  }
 
   const load = useCallback(() => {
     setError(null);
@@ -84,6 +125,32 @@ function ServiceRecordsInner() {
             <option value="">All trucks</option>
             {vehicles.map((v) => <option key={v.id} value={v.id}>#{v.unit_number}</option>)}
           </select>
+        </div>
+
+        {/* Export: pick a period (optional) and download XLSX or PDF */}
+        <div className="mt-4 flex flex-wrap items-end gap-3 rounded-lg border border-dashed border-line bg-mist/50 p-3.5">
+          <div>
+            <label className="text-xs font-medium text-steel" htmlFor="exp-from">From</label>
+            <input id="exp-from" type="date" className="field mt-1 !w-40 !py-2 text-sm"
+                   value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-steel" htmlFor="exp-to">To</label>
+            <input id="exp-to" type="date" className="field mt-1 !w-40 !py-2 text-sm"
+                   value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </div>
+          <button className="btn !py-2 text-sm" disabled={exporting !== ""}
+                  onClick={() => void download("xlsx")}>
+            {exporting === "xlsx" ? "Preparing…" : "Download XLSX"}
+          </button>
+          <button className="btn-quiet !py-2 text-sm" disabled={exporting !== ""}
+                  onClick={() => void download("pdf")}>
+            {exporting === "pdf" ? "Preparing…" : "Download PDF"}
+          </button>
+          <p className="basis-full text-xs text-faint sm:basis-auto">
+            Empty dates = full history. The truck filter above applies too.
+          </p>
+          {exportError && <p className="basis-full text-sm font-medium text-danger">{exportError}</p>}
         </div>
 
         {records === null ? (

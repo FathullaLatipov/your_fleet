@@ -397,9 +397,13 @@ LOGGED_SERVICE_CATEGORIES = (
 )
 
 
-@router.get("/service-records")
-def service_records(vehicle_id: uuid.UUID | None = Query(default=None),
-                    user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+def _collect_service_records(
+    db: Session,
+    user: User,
+    vehicle_id: uuid.UUID | None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> list[dict]:
     units = _my_vehicles(db, user)
     records: list[dict] = []
 
@@ -407,6 +411,10 @@ def service_records(vehicle_id: uuid.UUID | None = Query(default=None),
                                Booking.status == BookingStatus.COMPLETED)
     if vehicle_id is not None:
         bq = bq.where(Booking.vehicle_id == vehicle_id)
+    if date_from is not None:
+        bq = bq.where(Booking.updated_at >= date_from)
+    if date_to is not None:
+        bq = bq.where(Booking.updated_at <= date_to)
     bookings = db.execute(bq).scalars().all()
     biz_ids = {b.business_id for b in bookings}
     biz_names: dict[uuid.UUID, str] = {}
@@ -436,6 +444,10 @@ def service_records(vehicle_id: uuid.UUID | None = Query(default=None),
         )
         if vehicle_id is not None:
             eq = eq.where(VehicleExpense.vehicle_id == vehicle_id)
+        if date_from is not None:
+            eq = eq.where(VehicleExpense.incurred_at >= date_from)
+        if date_to is not None:
+            eq = eq.where(VehicleExpense.incurred_at <= date_to)
         for e in db.execute(eq).scalars().all():
             records.append({
                 "date": _iso(e.incurred_at),
@@ -451,7 +463,59 @@ def service_records(vehicle_id: uuid.UUID | None = Query(default=None),
             })
 
     records.sort(key=lambda r: r["date"] or "", reverse=True)
-    return records[:300]
+    return records
+
+
+@router.get("/service-records")
+def service_records(vehicle_id: uuid.UUID | None = Query(default=None),
+                    user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    return _collect_service_records(db, user, vehicle_id)[:300]
+
+
+@router.get("/service-records/export")
+def service_records_export(
+    format: str = Query(default="xlsx", pattern="^(xlsx|pdf)$"),
+    vehicle_id: uuid.UUID | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    user: User = Depends(fleet_user),
+    db: Session = Depends(get_db),
+):
+    """Download the service history as a spreadsheet or a PDF report."""
+    from fastapi.responses import Response
+
+    from app.services.service_export import records_to_pdf, records_to_xlsx
+
+    # Make naive query params comparable with tz-aware columns.
+    if date_from and date_from.tzinfo is None:
+        date_from = date_from.replace(tzinfo=timezone.utc)
+    if date_to and date_to.tzinfo is None:
+        date_to = date_to.replace(hour=23, minute=59, second=59, tzinfo=timezone.utc)
+
+    records = _collect_service_records(db, user, vehicle_id, date_from, date_to)
+    period = (
+        f"{date_from.date().isoformat() if date_from else 'start'}"
+        f"_{date_to.date().isoformat() if date_to else 'today'}"
+    )
+    unit = None
+    if vehicle_id is not None:
+        unit = _my_vehicles(db, user).get(vehicle_id)
+    title_period = (
+        f"{date_from.date().isoformat() if date_from else '...'} - "
+        f"{date_to.date().isoformat() if date_to else 'today'}"
+    )
+
+    if format == "xlsx":
+        data = records_to_xlsx(records, period=title_period, unit=unit)
+        media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ext = "xlsx"
+    else:
+        data = records_to_pdf(records, period=title_period, unit=unit)
+        media = "application/pdf"
+        ext = "pdf"
+    filename = f"service-records_{period}.{ext}"
+    return Response(content=data, media_type=media,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'})
 
 
 # ----------------------------------------------------------------- expenses
