@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { useAuth } from "@/lib/auth";
 
@@ -46,6 +46,12 @@ const SHELL_ROUTES =
 export function Header() {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+
+  function signOut() {
+    logout();
+    router.push("/");
+  }
 
   if (SHELL_ROUTES.test(pathname)) return null;
 
@@ -76,7 +82,7 @@ export function Header() {
               </NavLink>
               <span className="hidden text-sm text-white/45 md:inline">{user.full_name}</span>
               <button
-                onClick={logout}
+                onClick={signOut}
                 className="rounded-lg border border-white/20 px-3.5 py-1.5 text-sm font-semibold text-white/85 transition-colors hover:border-white/50 hover:text-white"
               >
                 Sign out

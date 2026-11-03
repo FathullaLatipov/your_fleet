@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { Loader } from "@/components/Loader";
 import { useAuth } from "@/lib/auth";
@@ -149,6 +149,12 @@ function SideLink({ item, pathname }: { item: NavItem; pathname: string }) {
 export function AppShell({ title, children }: { title: string; children: React.ReactNode }) {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+
+  function signOut() {
+    logout();
+    router.push("/");
+  }
 
   if (loading) return <Loader className="min-h-screen" />;
   if (!user) {
@@ -256,7 +262,7 @@ export function AppShell({ title, children }: { title: string; children: React.R
           <p className="truncate text-sm font-semibold text-white">{user.full_name}</p>
           <p className="text-xs text-white/50">{user.role.replace("_", " ")}</p>
           <button
-            onClick={logout}
+            onClick={signOut}
             className="mt-3 w-full rounded-lg border border-white/20 px-3.5 py-1.5 text-sm font-semibold text-white/85 transition-colors hover:border-white/50 hover:text-white"
           >
             Sign out
