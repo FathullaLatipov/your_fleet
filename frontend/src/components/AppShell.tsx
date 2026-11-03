@@ -7,15 +7,26 @@ import { Loader } from "@/components/Loader";
 import { useAuth } from "@/lib/auth";
 
 /* Hex-nut mark in safety orange — same glyph as the global Header. */
-function Mark() {
+function Mark({ className = "h-7 w-7" }: { className?: string }) {
   return (
-    <svg viewBox="0 0 28 28" className="h-7 w-7" aria-hidden>
+    <svg viewBox="0 0 28 28" className={className} aria-hidden>
       <path d="M14 2.5 23.5 8v12L14 25.5 4.5 20V8L14 2.5Z" fill="var(--color-cta)" />
       <path
         d="M14 9.2a4.8 4.8 0 1 0 0 9.6 4.8 4.8 0 0 0 0-9.6Zm0 7.1a2.3 2.3 0 1 1 0-4.6 2.3 2.3 0 0 1 0 4.6Z"
         fill="#16181b"
       />
     </svg>
+  );
+}
+
+/* Full-screen branded gate shown instead of the shell (sign-in / wrong role). */
+function Gate({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-charcoal bg-[radial-gradient(70rem_40rem_at_50%_-20%,#17523566,transparent)] px-4 py-10">
+      <div className="card hero-rise w-full max-w-md p-8 text-center shadow-(--shadow-pop)">
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -142,10 +153,42 @@ export function AppShell({ title, children }: { title: string; children: React.R
   if (loading) return <Loader className="min-h-screen" />;
   if (!user) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-16">
-        <p className="text-steel">Sign in to see your dashboard.</p>
-        <Link href={`/login?next=${pathname}`} className="btn mt-4">Sign in</Link>
-      </div>
+      <Gate>
+        <Mark className="mx-auto h-12 w-12" />
+        <h1 className="mt-4 text-2xl font-bold">Sign in to YourFleet</h1>
+        <p className="mt-2 text-[15px] text-steel">
+          Your fleet lives behind your account — trucks, maintenance schedules,
+          PTI defects, repairs and every dollar spent.
+        </p>
+        <Link href={`/login?next=${encodeURIComponent(pathname)}`} className="btn mt-6 w-full !py-3">
+          Sign in
+        </Link>
+        <Link href="/register" className="btn-quiet mt-2.5 w-full">
+          Create a free account
+        </Link>
+        <Link href="/" className="mt-5 inline-block text-sm font-medium text-steel hover:text-ink hover:underline">
+          ← Back to the site
+        </Link>
+      </Gate>
+    );
+  }
+  if (user.role === "provider" || user.role === "admin") {
+    const home = user.role === "admin" ? "/admin" : "/provider";
+    return (
+      <Gate>
+        <Mark className="mx-auto h-12 w-12" />
+        <h1 className="mt-4 text-2xl font-bold">This area is for carriers</h1>
+        <p className="mt-2 text-[15px] text-steel">
+          The fleet dashboard is for driver and fleet-manager accounts. Your
+          {user.role === "admin" ? " admin console" : " shop dashboard"} is one click away.
+        </p>
+        <Link href={home} className="btn mt-6 w-full !py-3">
+          {user.role === "admin" ? "Open admin console" : "Open my shop dashboard"}
+        </Link>
+        <Link href="/" className="mt-4 inline-block text-sm font-medium text-steel hover:text-ink hover:underline">
+          ← Back to the site
+        </Link>
+      </Gate>
     );
   }
 
