@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/badges";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
@@ -196,7 +197,7 @@ function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () 
 
 /* ------------------------------------------------------------------ */
 
-export default function VehiclePage() {
+function VehicleInner() {
   const { id } = useParams<{ id: string }>();
   const { user, loading } = useAuth();
   const [d, setD] = useState<VehicleDetail | null>(null);
@@ -757,5 +758,13 @@ export default function VehiclePage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function VehiclePage() {
+  return (
+    <AppShell title="My trucks">
+      <VehicleInner />
+    </AppShell>
   );
 }

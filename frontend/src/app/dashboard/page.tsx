@@ -1,341 +1,424 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { StatusBadge, Stars, TrustBadges } from "@/components/badges";
+import { AppShell } from "@/components/AppShell";
+import { StatusBadge } from "@/components/badges";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import type { Booking, BusinessListItem, Notification, Vehicle } from "@/lib/types";
+import { fmtUsd } from "@/lib/types";
 
-const ACTIVE = new Set(["requested", "quoted", "accepted", "confirmed", "in_progress", "disputed"]);
+/* Contract for GET /api/fleet/analytics. */
+interface Analytics {
+  kpis: {
+    trucks: number;
+    trucks_in_repair: number;
+    open_defects: number;
+    major_defects: number;
+    active_requests: number;
+    maintenance_overdue: number;
+    maintenance_due_soon: number;
+    document_warnings: number;
+    spend_total_cents: number;
+    spend_period_cents: number;
+  };
+  spend_trend: { month: string; total_cents: number }[];
+  spend_by_category: { category: string; total_cents: number }[];
+  top_issues: { label: string; count: number }[];
+  deadlines: {
+    vehicle_id: string;
+    unit_number: string;
+    title: string;
+    status: "overdue" | "due_soon";
+    miles_left: number | null;
+    days_left: number | null;
+  }[];
+  open_defect_list: {
+    id: string;
+    vehicle_id: string;
+    unit_number: string;
+    defect_type: string;
+    severity: string | null;
+    reported_at: string;
+  }[];
+  active_request_list: {
+    id: string;
+    status: string;
+    issue_description: string;
+    created_at: string;
+    unit_number: string | null;
+  }[];
+}
 
-/* Inline icon set — 24px stroke glyphs, consistent with the brand. */
-const Icons = {
-  wrench: (
-    <path d="M14.5 6.5a4 4 0 0 1 5-3.9l-2.8 2.8 2 2 2.8-2.8a4 4 0 0 1-5.2 4.9L8 17.8A2.1 2.1 0 1 1 5 14.9l7.6-7.6a4 4 0 0 1 1.9-.8Z" />
-  ),
-  history: (
-    <>
-      <path d="M12 21a9 9 0 1 0-8.6-11.7" />
-      <path d="M3 4v5h5M12 7v5l3.5 2" strokeLinecap="round" />
-    </>
-  ),
-  bookmark: <path d="M6.5 3.5h11a1 1 0 0 1 1 1V21l-6.5-4-6.5 4V4.5a1 1 0 0 1 1-1Z" />,
-  bell: (
-    <>
-      <path d="M12 3a6 6 0 0 0-6 6v3.2l-1.7 3.3a.6.6 0 0 0 .5.9h14.4a.6.6 0 0 0 .5-.9L18 12.2V9a6 6 0 0 0-6-6Z" />
-      <path d="M9.8 19.5a2.3 2.3 0 0 0 4.4 0" strokeLinecap="round" />
-    </>
-  ),
-  truck: (
-    <>
-      <path d="M2 16V7h11v9M13 10h5l3 3v3h-3M2 16h2m3.5 0H13m4.5 0H21" />
-      <path d="M6 18a2 2 0 1 0 0-4 2 2 0 0 0 0 4Zm9 2a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" />
-    </>
-  ),
-};
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
-function Icon({ name, className = "h-5 w-5" }: { name: keyof typeof Icons; className?: string }) {
+function monthLabel(ym: string): string {
+  const m = Number(ym.split("-")[1]);
+  return MONTHS[m - 1] ?? ym;
+}
+
+/* Compact y-axis money label: $0, $850, $1.2k */
+function compactUsd(cents: number): string {
+  const d = cents / 100;
+  if (d >= 1000) {
+    const k = d / 1000;
+    return `$${k >= 10 ? Math.round(k) : k.toFixed(1).replace(/\.0$/, "")}k`;
+  }
+  return `$${Math.round(d)}`;
+}
+
+function greeting(): string {
+  const h = new Date().getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function UnitChip({ unit }: { unit: string }) {
   return (
-    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor"
-         strokeWidth="1.7" strokeLinejoin="round" aria-hidden>
-      {Icons[name]}
-    </svg>
+    <span className="rounded bg-mist px-1.5 py-0.5 text-xs font-semibold text-steel">#{unit}</span>
   );
 }
 
-function SectionCard({
-  icon, title, count, children,
-}: {
-  icon: keyof typeof Icons;
-  title: string;
-  count?: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="card p-5">
-      <div className="flex items-center gap-3">
-        <span className="grid h-10 w-10 place-items-center rounded-lg bg-pine-wash text-pine">
-          <Icon name={icon} />
-        </span>
-        <h2 className="text-lg font-bold">{title}</h2>
-        {count !== undefined && count > 0 && (
-          <span className="rounded-full bg-mist px-2.5 py-0.5 text-sm font-semibold text-steel">{count}</span>
-        )}
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
-  );
-}
+/* Hand-rolled monthly spend bar chart: 6 bars, amber, baseline-anchored. */
+function SpendTrendChart({ trend }: { trend: Analytics["spend_trend"] }) {
+  const max = Math.max(...trend.map((t) => t.total_cents), 0);
 
-function EmptyState({
-  icon, text, actionHref, actionLabel,
-}: {
-  icon: keyof typeof Icons;
-  text: string;
-  actionHref?: string;
-  actionLabel?: string;
-}) {
-  return (
-    <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-line bg-mist/60 px-4 py-8 text-center">
-      <span className="grid h-12 w-12 place-items-center rounded-full bg-panel text-faint shadow-[0_1px_2px_rgb(22_24_27/0.06)]">
-        <Icon name={icon} className="h-6 w-6" />
-      </span>
-      <p className="max-w-[36ch] text-sm text-steel">{text}</p>
-      {actionHref && actionLabel && (
-        <Link href={actionHref} className="btn !py-2 text-sm">{actionLabel}</Link>
-      )}
-    </div>
-  );
-}
-
-export default function DriverDashboard() {
-  const { user, loading } = useAuth();
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [favorites, setFavorites] = useState<BusinessListItem[]>([]);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-
-  useEffect(() => {
-    if (!user) return;
-    api<Booking[]>("/api/bookings/mine").then(setBookings).catch(() => {});
-    api<BusinessListItem[]>("/api/me/favorites").then(setFavorites).catch(() => {});
-    api<Notification[]>("/api/me/notifications").then(setNotifications).catch(() => {});
-    api<Vehicle[]>("/api/fleet/vehicles").then(setVehicles).catch(() => {});
-  }, [user]);
-
-  if (loading) return <Loader />;
-  if (!user) {
+  if (max === 0) {
     return (
-      <div className="mx-auto max-w-5xl px-4 py-16">
-        <p className="text-steel">Sign in to see your repairs.</p>
-        <Link href="/login?next=/dashboard" className="btn mt-4">Sign in</Link>
+      <div className="flex min-h-44 items-center justify-center rounded-lg border border-dashed border-line bg-mist/60 px-4 py-8 text-center">
+        <p className="max-w-[40ch] text-sm text-steel">
+          No spend recorded yet — completed repairs land here automatically.
+        </p>
       </div>
     );
   }
 
-  const active = bookings.filter((b) => ACTIVE.has(b.status));
-  const past = bookings.filter((b) => !ACTIVE.has(b.status));
-  const completed = past.filter((b) => b.status === "completed");
-  const unread = notifications.filter((n) => !n.read_at);
+  return (
+    <div className="mt-8 flex gap-3">
+      {/* y axis */}
+      <div className="flex h-44 flex-col justify-between text-right text-xs tabular-nums text-faint">
+        <span className="-translate-y-1/2">{compactUsd(max)}</span>
+        <span>{compactUsd(max / 2)}</span>
+        <span className="translate-y-1/2">$0</span>
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="relative h-44">
+          <div className="absolute inset-x-0 top-0 h-px bg-line" aria-hidden />
+          <div className="absolute inset-x-0 top-1/2 h-px bg-line" aria-hidden />
+          <div className="absolute inset-x-0 bottom-0 h-px bg-line" aria-hidden />
+          <div className="absolute inset-0 flex items-end gap-2 px-1">
+            {trend.map((t) => {
+              const isMax = t.total_cents === max;
+              const pct = (t.total_cents / max) * 100;
+              return (
+                <div key={t.month} className="group flex h-full flex-1 items-end justify-center">
+                  {t.total_cents > 0 && (
+                    <div
+                      className="relative w-full max-w-7 rounded-t bg-amber"
+                      style={{ height: `${pct}%` }}
+                    >
+                      <span
+                        className={`pointer-events-none absolute -top-7 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-panel px-1.5 py-0.5 text-xs font-semibold tabular-nums text-ink shadow-(--shadow-card) ${
+                          isMax ? "" : "opacity-0 transition-opacity group-hover:opacity-100"
+                        }`}
+                      >
+                        {fmtUsd(t.total_cents)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        {/* month labels */}
+        <div className="mt-2 flex gap-2 px-1">
+          {trend.map((t) => (
+            <span key={t.month} className="flex-1 text-center text-xs text-steel">
+              {monthLabel(t.month)}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
 
-  async function markRead(id: string) {
-    await api(`/api/me/notifications/${id}/read`, { method: "POST" }).catch(() => {});
-    setNotifications((ns) => ns.map((n) => (n.id === id ? { ...n, read_at: new Date().toISOString() } : n)));
+function KpiCard({
+  label, value, sub, href,
+}: {
+  label: string;
+  value: string | number;
+  sub?: React.ReactNode;
+  href?: string;
+}) {
+  const body = (
+    <>
+      <p className="text-sm font-medium text-steel">{label}</p>
+      <p className="display mt-1.5 text-3xl font-bold tabular-nums leading-none">{value}</p>
+      {sub && <div className="mt-2 text-sm">{sub}</div>}
+    </>
+  );
+  if (href) {
+    return (
+      <Link href={href} className="card block p-5 transition-[border-color,box-shadow] hover:border-pine/50 hover:shadow-(--shadow-lift)">
+        {body}
+      </Link>
+    );
+  }
+  return <div className="card p-5">{body}</div>;
+}
+
+function DashboardInner() {
+  const { user } = useAuth();
+  const [data, setData] = useState<Analytics | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setError(null);
+    api<Analytics>("/api/fleet/analytics").then(setData).catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+  }, []);
+
+  useEffect(() => {
+    if (user) load();
+  }, [user, load]);
+
+  const firstName = user?.full_name.split(" ")[0] ?? "";
+  const dateLine = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+
+  if (error) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+        <div className="card p-6">
+          <p className="font-semibold">Couldn&apos;t load your fleet overview.</p>
+          <p className="mt-1 text-sm text-steel">
+            The analytics service didn&apos;t respond. Your trucks and repairs are still available from the sidebar.
+          </p>
+          <button className="btn-quiet mt-4 !py-2 text-sm" onClick={load}>Try again</button>
+        </div>
+      </div>
+    );
   }
 
-  const BookingRow = ({ b }: { b: Booking }) => (
-    <li>
-      <Link
-        href={`/bookings/${b.id}`}
-        className="flex items-center justify-between gap-3 rounded-lg px-3 py-3 transition-colors hover:bg-mist"
-      >
-        <div className="min-w-0">
-          <p className="truncate font-semibold">
-            {b.issue_description.slice(0, 80)}{b.issue_description.length > 80 ? "…" : ""}
-          </p>
-          <p className="mt-0.5 text-sm text-faint">
-            {new Date(b.created_at).toLocaleDateString()}
-            {b.urgency === "emergency" && <span className="ml-1.5 font-semibold text-danger">Emergency</span>}
-            {b.quoted_price_cents != null && ` · quoted $${(b.quoted_price_cents / 100).toLocaleString()}`}
-          </p>
-        </div>
-        <StatusBadge status={b.status} />
-      </Link>
-    </li>
-  );
+  if (!data) return <Loader />;
+
+  const k = data.kpis;
+  const otherDefects = Math.max(k.open_defects - k.major_defects, 0);
+  const maintTotal = k.maintenance_overdue + k.maintenance_due_soon;
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">My repairs</h1>
-          <p className="mt-1 text-steel">Hey {user.full_name.split(" ")[0]} — here&apos;s where your trucks stand.</p>
-        </div>
-        <Link href="/search" className="btn">
-          <Icon name="wrench" className="h-4.5 w-4.5" />
-          Find truck repair
-        </Link>
+    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
+      <div>
+        <h2 className="display text-2xl font-bold">
+          {greeting()}, {firstName} 👋
+        </h2>
+        <p className="mt-1 text-sm text-steel">{dateLine} — here&apos;s where your fleet stands.</p>
       </div>
 
-      {/* Stat strip */}
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {([
-          ["truck", vehicles.length, "my trucks"],
-          ["wrench", active.length, "active requests"],
-          ["history", completed.length, "repairs completed"],
-          ["bookmark", favorites.length, "saved shops"],
-        ] as const).map(([icon, value, label]) => (
-          <div key={label} className="card flex items-center gap-3 p-4">
-            <span className="hidden h-10 w-10 shrink-0 place-items-center rounded-lg bg-mist text-steel sm:grid">
-              <Icon name={icon} />
-            </span>
-            <div>
-              <p className="display text-2xl font-bold leading-none">{value}</p>
-              <p className="mt-1 text-sm text-steel">{label}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[1fr_340px]">
-        <div className="space-y-6">
-          <section className="card p-5">
-            <div className="flex flex-wrap items-center gap-3">
-              <span className="grid h-10 w-10 place-items-center rounded-lg bg-pine-wash text-pine">
-                <Icon name="truck" />
-              </span>
-              <h2 className="text-lg font-bold">My trucks</h2>
-              {vehicles.length > 0 && (
-                <span className="rounded-full bg-mist px-2.5 py-0.5 text-sm font-semibold text-steel">
-                  {vehicles.length}
+      {/* KPI row */}
+      <div className="mt-5 grid gap-5 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          label="My trucks"
+          value={k.trucks}
+          sub={k.trucks_in_repair > 0 ? <span className="text-amber-ink">{k.trucks_in_repair} in repair</span> : <span className="text-faint">All on the road</span>}
+        />
+        <KpiCard
+          label="Open issues"
+          value={k.open_defects}
+          sub={
+            k.open_defects > 0 ? (
+              <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="flex items-center gap-1.5 text-danger">
+                  <span className="h-2 w-2 rounded-full bg-danger" aria-hidden />
+                  {k.major_defects} major
                 </span>
-              )}
-              <Link href="/fleet" className="btn-quiet ml-auto !py-1.5 text-sm">
-                {vehicles.length > 0 ? "Open fleet" : "+ Add truck"}
-              </Link>
-            </div>
-            <div className="mt-4">
-              {vehicles.length === 0 ? (
-                <EmptyState
-                  icon="truck"
-                  text="Add your truck — VIN, mileage, service intervals — and YourFleet will warn you before maintenance is due and keep every repair cost on one ledger."
-                  actionHref="/fleet"
-                  actionLabel="Add truck"
-                />
-              ) : (
-                <ul className="-mx-3 divide-y divide-line/70">
-                  {vehicles.map((v) => (
-                    <li key={v.id}>
-                      <Link href={`/fleet/${v.id}`}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-3 transition-colors hover:bg-mist">
-                        <div>
-                          <p className="font-semibold">#{v.unit_number}
-                            <span className="ml-2 font-normal text-steel">
-                              {[v.year, v.make, v.model].filter(Boolean).join(" ")}
-                            </span>
-                          </p>
-                          <p className="text-sm text-faint">
-                            {v.odometer_miles != null ? `${Math.round(v.odometer_miles).toLocaleString()} mi` : "No odometer yet"}
-                          </p>
-                        </div>
-                        <span className="flex items-center gap-1.5">
-                          {v.open_defects > 0 && (
-                            <span className="rounded-full bg-danger-wash px-2 py-0.5 text-xs font-bold text-danger">
-                              {v.open_defects} defect{v.open_defects > 1 ? "s" : ""}
-                            </span>
-                          )}
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            v.maintenance_status === "overdue" ? "bg-danger-wash text-danger"
-                            : v.maintenance_status === "due_soon" ? "bg-amber-wash text-amber-ink"
-                            : v.maintenance_status === "ok" ? "bg-pine-wash text-pine"
-                            : "bg-mist text-faint"
-                          }`}>
-                            {v.maintenance_status === "overdue" ? "Service overdue"
-                             : v.maintenance_status === "due_soon" ? "Service due soon"
-                             : v.maintenance_status === "ok" ? "Maintenance OK" : "No service plan"}
-                          </span>
-                        </span>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          <SectionCard icon="wrench" title="Active requests" count={active.length}>
-            {active.length === 0 ? (
-              <EmptyState
-                icon="truck"
-                text="Nothing active. When a truck needs work, find a shop and send a request — you'll track it here."
-                actionHref="/search"
-                actionLabel="Find a shop"
-              />
+                <span className="flex items-center gap-1.5 text-amber-ink">
+                  <span className="h-2 w-2 rounded-full bg-amber" aria-hidden />
+                  {otherDefects} other
+                </span>
+              </span>
             ) : (
-              <ul className="-mx-3 divide-y divide-line/70">{active.map((b) => <BookingRow key={b.id} b={b} />)}</ul>
-            )}
-          </SectionCard>
-
-          <SectionCard icon="history" title="History" count={past.length}>
-            {past.length === 0 ? (
-              <EmptyState icon="history" text="Completed and cancelled repairs will show up here with their final costs." />
+              <span className="text-faint">No open defects</span>
+            )
+          }
+        />
+        <KpiCard
+          label="Maintenance"
+          value={maintTotal}
+          href="/fleet"
+          sub={
+            maintTotal > 0 ? (
+              <span>
+                <span className={k.maintenance_overdue > 0 ? "font-semibold text-danger" : "text-faint"}>
+                  {k.maintenance_overdue} overdue
+                </span>
+                <span className="text-faint"> · </span>
+                <span className={k.maintenance_due_soon > 0 ? "font-semibold text-amber-ink" : "text-faint"}>
+                  {k.maintenance_due_soon} due soon
+                </span>
+              </span>
             ) : (
-              <ul className="-mx-3 divide-y divide-line/70">{past.map((b) => <BookingRow key={b.id} b={b} />)}</ul>
-            )}
-          </SectionCard>
+              <span className="text-faint">Everything on schedule</span>
+            )
+          }
+        />
+        <KpiCard
+          label="Spend (90 days)"
+          value={fmtUsd(k.spend_period_cents)}
+          sub={<span className="text-faint tabular-nums">{fmtUsd(k.spend_total_cents)} all time</span>}
+        />
+      </div>
 
-        </div>
+      {/* Chart + top issues */}
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[1fr_320px]">
+        <section className="card p-5">
+          <h3 className="text-lg font-bold">Service cost trend</h3>
+          <SpendTrendChart trend={data.spend_trend} />
+        </section>
 
-        <div className="space-y-6">
-        <SectionCard icon="bell" title="Notifications" count={unread.length}>
-          {notifications.length === 0 ? (
-            <EmptyState icon="bell" text="Quotes, confirmations and maintenance alerts will land here." />
+        <section className="card p-5">
+          <h3 className="text-lg font-bold">Top issue reasons</h3>
+          {data.top_issues.length === 0 ? (
+            <p className="mt-4 text-sm text-steel">No defects recorded.</p>
           ) : (
-            <ul className="space-y-2">
-              {notifications.slice(0, 15).map((n) => (
-                <li key={n.id}
-                    className={`rounded-lg border p-3 text-sm ${n.read_at ? "border-line/60 bg-mist/60 text-steel" : "border-line bg-panel shadow-[0_1px_2px_rgb(22_24_27/0.05)]"}`}>
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="font-semibold">
-                      {!n.read_at && <span className="mr-1.5 inline-block h-2 w-2 rounded-full bg-cta align-middle" aria-label="Unread" />}
-                      {n.title}
-                    </p>
-                    {!n.read_at && (
-                      <button className="shrink-0 text-xs font-medium text-pine hover:underline" onClick={() => markRead(n.id)}>
-                        Mark read
-                      </button>
-                    )}
-                  </div>
-                  {n.body && <p className="mt-0.5">{n.body}</p>}
-                  {n.data?.booking_id && (
-                    <Link href={`/bookings/${n.data.booking_id}`} className="mt-1 inline-block font-medium text-pine hover:underline">
-                      Open booking
-                    </Link>
-                  )}
-                  {n.data?.vehicle_id && !n.data?.booking_id && (
-                    <Link href={`/fleet/${n.data.vehicle_id}`} className="mt-1 inline-block font-medium text-pine hover:underline">
-                      Open truck
-                    </Link>
-                  )}
-                </li>
-              ))}
+            <ul className="mt-4 space-y-3.5">
+              {data.top_issues.map((issue) => {
+                const maxCount = Math.max(...data.top_issues.map((i) => i.count), 1);
+                return (
+                  <li key={issue.label}>
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="truncate text-sm text-ink">{issue.label}</span>
+                      <span className="font-semibold tabular-nums">{issue.count}</span>
+                    </div>
+                    <div className="mt-1.5 h-1.5 rounded-full bg-mist">
+                      <div
+                        className="h-1.5 rounded-full bg-pine"
+                        style={{ width: `${(issue.count / maxCount) * 100}%` }}
+                      />
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
-        </SectionCard>
+        </section>
+      </div>
 
-        <SectionCard icon="bookmark" title="Saved shops" count={favorites.length}>
-          {favorites.length === 0 ? (
-            <EmptyState
-              icon="bookmark"
-              text="Keep the shops you trust one tap away — hit “Save shop” on any profile."
-              actionHref="/search"
-              actionLabel="Browse shops"
-            />
+      {/* Deadlines / defects / requests */}
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-3">
+        <section className="card p-5">
+          <h3 className="text-lg font-bold">Deadlines</h3>
+          {data.deadlines.length === 0 ? (
+            <p className="mt-4 text-sm text-steel">Nothing due. 🎉</p>
           ) : (
-            <ul className="-mx-3 divide-y divide-line/70">
-              {favorites.map((f) => (
-                <li key={f.id}>
-                  <Link href={`/business/${f.id}`}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-lg px-3 py-3 transition-colors hover:bg-mist">
-                    <div>
-                      <p className="font-semibold">{f.name}</p>
-                      <p className="text-sm text-steel">{f.city ? `${f.city}, ${f.state}` : f.state}</p>
-                    </div>
-                    <span className="flex items-center gap-2">
-                      <Stars avg={f.rating_avg} count={f.rating_count} />
-                      <TrustBadges b={f} compact />
+            <ul className="-mx-2 mt-3 space-y-0.5">
+              {data.deadlines.map((d, i) => (
+                <li key={`${d.vehicle_id}-${d.title}-${i}`}>
+                  <Link
+                    href={`/fleet/${d.vehicle_id}`}
+                    className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-mist"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <UnitChip unit={d.unit_number} />
+                      <span className="truncate text-sm font-medium">{d.title}</span>
                     </span>
+                    {d.status === "overdue" ? (
+                      <span className="shrink-0 rounded bg-danger-wash px-2 py-0.5 text-xs font-semibold text-danger">
+                        Overdue
+                      </span>
+                    ) : (
+                      <span className="shrink-0 rounded bg-amber-wash px-2 py-0.5 text-xs font-semibold text-amber-ink">
+                        {d.days_left != null
+                          ? `in ${d.days_left} d`
+                          : d.miles_left != null
+                          ? `${Math.round(d.miles_left).toLocaleString()} mi left`
+                          : "Due soon"}
+                      </span>
+                    )}
                   </Link>
                 </li>
               ))}
             </ul>
           )}
-        </SectionCard>
-        </div>
+        </section>
+
+        <section className="card p-5">
+          <h3 className="text-lg font-bold">Open defects</h3>
+          {data.open_defect_list.length === 0 ? (
+            <p className="mt-4 text-sm text-steel">No open defects. Pre-trip inspections land here.</p>
+          ) : (
+            <ul className="-mx-2 mt-3 space-y-0.5">
+              {data.open_defect_list.map((d) => (
+                <li key={d.id}>
+                  <Link
+                    href={`/fleet/${d.vehicle_id}`}
+                    className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-mist"
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <UnitChip unit={d.unit_number} />
+                      <span className="truncate text-sm font-medium">{d.defect_type}</span>
+                    </span>
+                    {d.severity && (
+                      <span
+                        className={`shrink-0 rounded px-2 py-0.5 text-xs font-semibold ${
+                          d.severity === "major" ? "bg-danger-wash text-danger" : "bg-amber-wash text-amber-ink"
+                        }`}
+                      >
+                        {d.severity}
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
+        <section className="card p-5">
+          <h3 className="text-lg font-bold">Active requests</h3>
+          {data.active_request_list.length === 0 ? (
+            <div className="mt-4">
+              <p className="text-sm text-steel">No repair requests in flight.</p>
+              <Link href="/search" className="btn-quiet mt-3 !py-2 text-sm">Find a shop</Link>
+            </div>
+          ) : (
+            <ul className="-mx-2 mt-3 space-y-0.5">
+              {data.active_request_list.map((r) => (
+                <li key={r.id}>
+                  <Link
+                    href={`/bookings/${r.id}`}
+                    className="flex items-center justify-between gap-2 rounded-lg px-2 py-2 transition-colors hover:bg-mist"
+                  >
+                    <span className="min-w-0 truncate text-sm font-medium">
+                      {r.issue_description.slice(0, 60)}
+                      {r.issue_description.length > 60 ? "…" : ""}
+                    </span>
+                    <StatusBadge status={r.status} />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
+          <Link href="/repairs" className="mt-3 inline-block text-sm font-medium text-pine hover:underline">
+            All repairs →
+          </Link>
+        </section>
       </div>
     </div>
+  );
+}
+
+export default function DashboardPage() {
+  return (
+    <AppShell title="Dashboard">
+      <DashboardInner />
+    </AppShell>
   );
 }

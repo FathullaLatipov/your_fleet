@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
+import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/badges";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
@@ -66,7 +67,7 @@ function actionsFor(kind: "driver" | "provider" | "admin", status: BookingStatus
   return A[`${kind}:${status}`] ?? [];
 }
 
-export default function BookingPage() {
+function BookingInner() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
   const [booking, setBooking] = useState<Booking | null>(null);
@@ -301,5 +302,13 @@ export default function BookingPage() {
         </ol>
       </div>
     </div>
+  );
+}
+
+export default function BookingPage() {
+  return (
+    <AppShell title="Repairs">
+      <BookingInner />
+    </AppShell>
   );
 }

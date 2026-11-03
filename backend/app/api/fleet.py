@@ -1,6 +1,7 @@
 """Fleet / TMS endpoints for carriers: vehicles, maintenance schedules,
 per-truck expenses, PTI defects, and defect -> nearby-shop price options."""
 import uuid
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -10,6 +11,7 @@ from app.db import get_db
 from app.models import (
     AuditLog,
     Booking,
+    BookingStatus,
     DefectStatus,
     InspectionDefect,
     MaintenanceSchedule,
@@ -17,6 +19,7 @@ from app.models import (
     UserRole,
     Vehicle,
     VehicleExpense,
+    VehicleStatus,
     utcnow,
 )
 from app.schemas import (
@@ -347,4 +350,162 @@ def defect_shop_options(
         "used_location": {"lat": lat, "lng": lng} if lat is not None else None,
         "total": total,
         "options": [BusinessListItem(**r) for r in rows],
+    }
+
+
+# ------------------------------------------------------------------ analytics
+
+ACTIVE_BOOKING_STATUSES = (
+    BookingStatus.REQUESTED, BookingStatus.QUOTED, BookingStatus.ACCEPTED,
+    BookingStatus.CONFIRMED, BookingStatus.IN_PROGRESS, BookingStatus.DISPUTED,
+)
+
+# Defect type -> dashboard issue bucket (history profile, independent of the
+# service-catalog mapping above).
+_ISSUE_BUCKETS = [
+    (("tire", "wheel"), "Tires / wheels"),
+    (("brake",), "Brakes"),
+    (("engine", "coolant", "leak", "oil"), "Engine"),
+    (("light", "electric", "battery"), "Electrical"),
+    (("trailer", "door"), "Trailer"),
+    (("transmission", "clutch"), "Transmission"),
+    (("dpf", "def", "exhaust"), "Aftertreatment"),
+]
+
+
+def _issue_label(defect_type: str) -> str:
+    t = defect_type.lower()
+    for keys, label in _ISSUE_BUCKETS:
+        if any(k in t for k in keys):
+            return label
+    return "Other"
+
+
+def _last_months(now, n: int = 6) -> list[str]:
+    """Last n calendar months as YYYY-MM, oldest first, inclusive of current."""
+    y, m = now.year, now.month
+    out = []
+    for _ in range(n):
+        out.append(f"{y:04d}-{m:02d}")
+        y, m = (y - 1, 12) if m == 1 else (y, m - 1)
+    return out[::-1]
+
+
+@router.get("/analytics")
+def fleet_analytics(user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    """Fleet-wide dashboard: KPI counters, 6-month spend trend, spend by
+    category, recurring issue buckets, upcoming maintenance deadlines, and
+    the freshest open defects / active repair requests."""
+    now = utcnow()
+    vehicles = db.execute(
+        select(Vehicle).where(Vehicle.owner_user_id == user.id)
+    ).scalars().all()
+    vehicle_ids = [v.id for v in vehicles]
+    units = {v.id: v.unit_number for v in vehicles}
+    odometers = {v.id: v.odometer_miles for v in vehicles}
+
+    defects: list[InspectionDefect] = []
+    expenses: list[VehicleExpense] = []
+    schedules: list[MaintenanceSchedule] = []
+    if vehicle_ids:
+        defects = db.execute(select(InspectionDefect).where(
+            InspectionDefect.vehicle_id.in_(vehicle_ids))).scalars().all()
+        expenses = db.execute(select(VehicleExpense).where(
+            VehicleExpense.vehicle_id.in_(vehicle_ids))).scalars().all()
+        schedules = db.execute(select(MaintenanceSchedule).where(
+            MaintenanceSchedule.vehicle_id.in_(vehicle_ids))).scalars().all()
+    active_bookings = db.execute(
+        select(Booking).where(Booking.driver_id == user.id,
+                              Booking.status.in_(ACTIVE_BOOKING_STATUSES))
+        .order_by(Booking.created_at.desc())
+    ).scalars().all()
+
+    open_defects = [d for d in defects if d.status != DefectStatus.RESOLVED]
+
+    # Maintenance: counters + the deadline board (overdue/due_soon only).
+    overdue = due_soon = 0
+    deadlines = []
+    for s in schedules:
+        st = schedule_status(s, odometers.get(s.vehicle_id))
+        if st["status"] == "overdue":
+            overdue += 1
+        elif st["status"] == "due_soon":
+            due_soon += 1
+        else:
+            continue
+        deadlines.append({
+            "vehicle_id": str(s.vehicle_id),
+            "unit_number": units.get(s.vehicle_id, ""),
+            "title": s.title,
+            "status": st["status"],
+            "miles_left": st["miles_left"],
+            "days_left": st["days_left"],
+        })
+
+    def deadline_key(d: dict):
+        left = [x for x in (d["days_left"], d["miles_left"]) if x is not None]
+        return (0 if d["status"] == "overdue" else 1, min(left) if left else 0.0)
+
+    deadlines.sort(key=deadline_key)
+
+    # Spend: trend is bucketed in Python (tiny data volume, no dialect tricks).
+    period_start = now - timedelta(days=90)
+    months = _last_months(now)
+    trend = {m: 0 for m in months}
+    by_category: dict[str, int] = {}
+    spend_total = spend_period = 0
+    for e in expenses:
+        spend_total += e.amount_cents
+        if e.incurred_at >= period_start:
+            spend_period += e.amount_cents
+        key = e.incurred_at.strftime("%Y-%m")
+        if key in trend:
+            trend[key] += e.amount_cents
+        by_category[e.category.value] = by_category.get(e.category.value, 0) + e.amount_cents
+
+    # Issue history: ALL defects regardless of status.
+    issue_counts: dict[str, int] = {}
+    for d in defects:
+        label = _issue_label(d.defect_type)
+        issue_counts[label] = issue_counts.get(label, 0) + 1
+    top_issues = sorted(issue_counts.items(), key=lambda kv: -kv[1])[:6]
+
+    open_sorted = sorted(open_defects, key=lambda d: d.reported_at, reverse=True)
+
+    return {
+        "kpis": {
+            "trucks": len(vehicles),
+            "trucks_in_repair": sum(1 for v in vehicles
+                                    if v.status == VehicleStatus.IN_REPAIR),
+            "open_defects": len(open_defects),
+            "major_defects": sum(1 for d in open_defects if d.severity == "major"),
+            "active_requests": len(active_bookings),
+            "maintenance_overdue": overdue,
+            "maintenance_due_soon": due_soon,
+            "document_warnings": sum(len(vehicle_warnings(v)) for v in vehicles),
+            "spend_total_cents": spend_total,
+            "spend_period_cents": spend_period,
+        },
+        "spend_trend": [{"month": m, "total_cents": trend[m]} for m in months],
+        "spend_by_category": [
+            {"category": c, "total_cents": t}
+            for c, t in sorted(by_category.items(), key=lambda kv: -kv[1]) if t > 0
+        ],
+        "top_issues": [{"label": label, "count": n} for label, n in top_issues],
+        "deadlines": deadlines[:8],
+        "open_defect_list": [{
+            "id": str(d.id),
+            "vehicle_id": str(d.vehicle_id),
+            "unit_number": units.get(d.vehicle_id, ""),
+            "defect_type": d.defect_type,
+            "severity": d.severity,
+            "reported_at": d.reported_at.isoformat(),
+        } for d in open_sorted[:6]],
+        "active_request_list": [{
+            "id": str(b.id),
+            "status": b.status.value,
+            "issue_description": b.issue_description,
+            "created_at": b.created_at.isoformat(),
+            "unit_number": units.get(b.vehicle_id) if b.vehicle_id else None,
+        } for b in active_bookings[:6]],
     }

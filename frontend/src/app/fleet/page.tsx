@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
+import { AppShell } from "@/components/AppShell";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -21,7 +22,7 @@ const STATUS_BADGE: Record<string, [string, string]> = {
   inactive: ["Inactive", "bg-mist text-faint"],
 };
 
-export default function FleetPage() {
+function FleetInner() {
   const { user, loading } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
@@ -86,15 +87,12 @@ export default function FleetPage() {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-8">
+    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold">Fleet</h1>
-          <p className="mt-1 text-sm text-steel">
-            Trucks, maintenance schedules, repair costs. Odometer updates automatically
-            when Samsara is connected.
-          </p>
-        </div>
+        <p className="text-sm text-steel">
+          Trucks, maintenance schedules, repair costs. Odometer updates automatically
+          when Samsara is connected.
+        </p>
         <button className="btn" onClick={() => setShowAdd(!showAdd)}>
           {showAdd ? "Close" : "Add truck"}
         </button>
@@ -220,5 +218,13 @@ export default function FleetPage() {
         </ul>
       )}
     </div>
+  );
+}
+
+export default function FleetPage() {
+  return (
+    <AppShell title="My trucks">
+      <FleetInner />
+    </AppShell>
   );
 }

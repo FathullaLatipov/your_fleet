@@ -38,9 +38,15 @@ function NavLink({ href, active, children }: { href: string; active: boolean; ch
   );
 }
 
+/* Routes that render inside the AppShell sidebar layout — the global header
+   stays out of their way. */
+const SHELL_ROUTES = /^\/dashboard|^\/fleet|^\/repairs|^\/bookings/;
+
 export function Header() {
   const { user, loading, logout } = useAuth();
   const pathname = usePathname();
+
+  if (SHELL_ROUTES.test(pathname)) return null;
 
   return (
     <header className="sticky top-0 z-[1100] border-b border-white/10 bg-charcoal/95 backdrop-blur">
