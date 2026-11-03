@@ -356,6 +356,105 @@ class InspectionDefect(Base):
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
+class TrailerStatus(str, enum.Enum):
+    ACTIVE = "active"
+    IN_REPAIR = "in_repair"
+    INACTIVE = "inactive"
+
+
+class Trailer(Base):
+    """A carrier's trailer, optionally hooked to one of their trucks."""
+
+    __tablename__ = "trailers"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    unit_number: Mapped[str] = mapped_column(String(32))
+    trailer_type: Mapped[str | None] = mapped_column(String(32))  # dry_van/reefer/flatbed/...
+    year: Mapped[int | None] = mapped_column(Integer)
+    vin: Mapped[str | None] = mapped_column(String(17))
+    license_plate: Mapped[str | None] = mapped_column(String(32))
+    state: Mapped[str | None] = mapped_column(String(32))
+    status: Mapped[TrailerStatus] = mapped_column(
+        str_enum(TrailerStatus), default=TrailerStatus.ACTIVE
+    )
+    assigned_vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"))
+    inspection_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registration_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "unit_number", name="uq_trailer_unit"),
+    )
+
+
+class FleetDriver(Base):
+    """Driver roster entry (people, not accounts)."""
+
+    __tablename__ = "fleet_drivers"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    phone: Mapped[str | None] = mapped_column(String(32))
+    email: Mapped[str | None] = mapped_column(String(255))
+    cdl_number: Mapped[str | None] = mapped_column(String(32))
+    cdl_class: Mapped[str | None] = mapped_column(String(8))
+    cdl_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    medical_card_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    status: Mapped[str] = mapped_column(String(16), default="active")  # active | inactive
+    assigned_vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"))
+    hired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskStatus(str, enum.Enum):
+    OPEN = "open"
+    IN_PROGRESS = "in_progress"
+    DONE = "done"
+
+
+class FleetTask(Base):
+    """Lightweight operations task (schedule inspection, order a part, ...)."""
+
+    __tablename__ = "fleet_tasks"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    title: Mapped[str] = mapped_column(String(255))
+    details: Mapped[str | None] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(8), default="medium")  # low|medium|high
+    status: Mapped[TaskStatus] = mapped_column(
+        str_enum(TaskStatus), default=TaskStatus.OPEN, index=True
+    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"))
+    trailer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("trailers.id"))
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("fleet_drivers.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CommLogEntry(Base):
+    """Communication log: calls / emails / texts / notes about fleet matters."""
+
+    __tablename__ = "comm_log_entries"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(8), default="note")  # call|email|text|note
+    subject: Mapped[str] = mapped_column(String(255))
+    body: Mapped[str | None] = mapped_column(Text)
+    contact_name: Mapped[str | None] = mapped_column(String(128))
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"))
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("fleet_drivers.id"))
+    booking_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("bookings.id"))
+    happened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 # ---------------------------------------------------------------- import provenance
 
 class ImportBatch(Base):

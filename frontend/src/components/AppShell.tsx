@@ -48,6 +48,54 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M9.8 19.5a2.3 2.3 0 0 0 4.4 0" strokeLinecap="round" />
     </>
   ),
+  trailer: (
+    <>
+      <path d="M3 6h15v9H3V6ZM18 10h3v5h-3M3 15v3M21 15v3" />
+      <path d="M8 19.5a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6Zm5 0a1.8 1.8 0 1 0 0-3.6 1.8 1.8 0 0 0 0 3.6Z" />
+    </>
+  ),
+  users: (
+    <>
+      <circle cx="9" cy="8.5" r="3.5" />
+      <path d="M3.5 19.5c.6-3.2 2.8-5 5.5-5s4.9 1.8 5.5 5M15.5 5.6a3.5 3.5 0 0 1 0 5.8M17.5 14.7c1.6.7 2.7 2.2 3 4.8" strokeLinecap="round" />
+    </>
+  ),
+  alert: (
+    <>
+      <path d="M12 3.5 21.5 20h-19L12 3.5Z" strokeLinejoin="round" />
+      <path d="M12 10v4.5M12 17.2v.3" strokeLinecap="round" />
+    </>
+  ),
+  check: (
+    <>
+      <rect x="4" y="4" width="16" height="16" rx="3" />
+      <path d="m8.5 12.5 2.5 2.5 4.8-5.3" strokeLinecap="round" />
+    </>
+  ),
+  calendar: (
+    <>
+      <rect x="3.5" y="5" width="17" height="15.5" rx="2" />
+      <path d="M3.5 9.5h17M8 3v4M16 3v4" strokeLinecap="round" />
+    </>
+  ),
+  chat: (
+    <path d="M4 5.5h16v10.5h-9l-4.5 3.5v-3.5H4V5.5Z" strokeLinejoin="round" />
+  ),
+  records: (
+    <>
+      <path d="M6 3.5h9l3.5 3.5v13.5H6V3.5Z" strokeLinejoin="round" />
+      <path d="M15 3.5V7h3.5M9 11h6M9 14.5h6" strokeLinecap="round" />
+    </>
+  ),
+  dollar: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M15 9.3c-.6-1-1.7-1.5-3-1.5-1.7 0-2.9.9-2.9 2.1 0 2.9 6 1.5 6 4.3 0 1.3-1.3 2.2-3.1 2.2-1.4 0-2.6-.6-3.2-1.6M12 6.2v11.6" strokeLinecap="round" />
+    </>
+  ),
+  chart: (
+    <path d="M4 20V10M10 20V4M16 20v-8M21 20H3" strokeLinecap="round" />
+  ),
 };
 
 function NavIcon({ name, className = "h-4.5 w-4.5 shrink-0" }: { name: string; className?: string }) {
@@ -103,8 +151,32 @@ export function AppShell({ title, children }: { title: string; children: React.R
 
   const groups: { label: string; items: NavItem[] }[] = [
     { label: "Overview", items: [{ href: "/dashboard", label: "Dashboard", icon: "gauge" }] },
-    { label: "Fleet", items: [{ href: "/fleet", label: "My trucks", icon: "truck" }] },
-    { label: "Operations", items: [{ href: "/repairs", label: "Repairs", icon: "wrench" }] },
+    {
+      label: "Fleet",
+      items: [
+        { href: "/fleet", label: "Trucks", icon: "truck" },
+        { href: "/trailers", label: "Trailers", icon: "trailer" },
+        { href: "/drivers", label: "Drivers", icon: "users" },
+      ],
+    },
+    {
+      label: "Operations",
+      items: [
+        { href: "/issues", label: "Issues", icon: "alert" },
+        { href: "/tasks", label: "Tasks", icon: "check" },
+        { href: "/deadlines", label: "Deadlines", icon: "calendar" },
+        { href: "/repairs", label: "Repairs", icon: "wrench" },
+        { href: "/comm-log", label: "Comm log", icon: "chat" },
+      ],
+    },
+    {
+      label: "Finance",
+      items: [
+        { href: "/service-records", label: "Service records", icon: "records" },
+        { href: "/expenses", label: "Expenses", icon: "dollar" },
+      ],
+    },
+    { label: "Insights", items: [{ href: "/analytics", label: "Analytics", icon: "chart" }] },
   ];
   const siteItems: NavItem[] = [{ href: "/search", label: "Find repair", icon: "search" }];
   if (user.role === "provider") siteItems.push({ href: "/for-shops", label: "For shops", icon: "shop" });
