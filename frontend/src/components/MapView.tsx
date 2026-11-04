@@ -32,10 +32,14 @@ function ClusterLayer({
   items,
   activeId,
   onSelect,
+  onAssign,
+  profileQuery,
 }: {
   items: MapPoint[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  onAssign?: (id: string, name: string) => void;
+  profileQuery?: string;
 }) {
   const map = useMap();
   const groupRef = useRef<L.MarkerClusterGroup | null>(null);
@@ -66,12 +70,21 @@ function ClusterLayer({
     group.clearLayers();
     for (const b of items) {
       const marker = L.marker([b.lat, b.lng], { icon: pinIcon(b, b.id === activeId) });
-      marker.bindPopup(
+      // Popup is a DOM node so the assign action can be a real click handler.
+      const popup = document.createElement("div");
+      popup.innerHTML =
         `<strong>${esc(b.name)}</strong><br/>` +
-          `${b.city ? esc(`${b.city}, ${b.state ?? ""}`) : esc(b.state ?? "")}` +
-          `${b.distance_miles != null ? ` · ${b.distance_miles} mi` : ""}<br/>` +
-          `<a href="/business/${b.id}">View profile</a>`,
-      );
+        `${b.city ? esc(`${b.city}, ${b.state ?? ""}`) : esc(b.state ?? "")}` +
+        `${b.distance_miles != null ? ` · ${b.distance_miles} mi` : ""}<br/>` +
+        `<a href="/business/${b.id}${profileQuery ?? ""}">View profile</a>`;
+      if (onAssign) {
+        const btn = document.createElement("button");
+        btn.textContent = "Assign this shop";
+        btn.className = "btn mt-1.5 block !px-2.5 !py-1 !text-xs";
+        btn.onclick = () => onAssign(b.id, b.name);
+        popup.appendChild(btn);
+      }
+      marker.bindPopup(popup);
       marker.on("click", () => onSelect(b.id));
       group.addLayer(marker);
     }
@@ -81,7 +94,7 @@ function ClusterLayer({
       const bounds = L.latLngBounds(items.map((i) => [i.lat, i.lng] as [number, number]));
       map.fitBounds(bounds.pad(0.15), { maxZoom: 12 });
     }
-  }, [items, activeId, map, onSelect]);
+  }, [items, activeId, map, onSelect, onAssign, profileQuery]);
 
   return null;
 }
@@ -90,10 +103,14 @@ export default function MapView({
   items,
   activeId,
   onSelect,
+  onAssign,
+  profileQuery,
 }: {
   items: MapPoint[];
   activeId: string | null;
   onSelect: (id: string) => void;
+  onAssign?: (id: string, name: string) => void;
+  profileQuery?: string;
 }) {
   return (
     <MapContainer center={[39.5, -96.5]} zoom={4} className="h-full w-full" scrollWheelZoom>
@@ -101,7 +118,8 @@ export default function MapView({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <ClusterLayer items={items} activeId={activeId} onSelect={onSelect} />
+      <ClusterLayer items={items} activeId={activeId} onSelect={onSelect}
+                    onAssign={onAssign} profileQuery={profileQuery} />
     </MapContainer>
   );
 }

@@ -1,5 +1,5 @@
 """Work order flow: transitions, quotes, approval, closing, RBAC."""
-from app.models import UserRole, Vehicle, VehicleStatus
+from app.models import Business, UserRole, Vehicle, VehicleStatus
 from tests.test_api import client, login, make_user  # noqa: F401
 from tests.test_fleet import add_vehicle, fleet_user
 
@@ -113,6 +113,31 @@ class TestWorkOrderFlow:
         assert body["status"] == "looking_for_shop"
         assert body["accepted_quote_id"] is None
         assert body["quotes"][0]["status"] == "declined"
+
+    def test_assign_shop_from_directory(self, client, db):
+        _, h, _, wo = make_wo(client, db, "wo-assign@example.com")
+        biz = Business(name="Map Picked Truck Repair",
+                       normalized_name="map picked truck repair",
+                       lat=41.6, lng=-93.6, city="Des Moines", state="IA")
+        db.add(biz)
+        db.commit()
+        # Directly from open: assigns the shop and moves to looking_for_shop
+        r = client.post(f"{BASE}/{wo['id']}/assign-shop", headers=h,
+                        json={"business_id": str(biz.id)})
+        assert r.status_code == 200
+        body = r.json()
+        assert body["status"] == "looking_for_shop"
+        assert body["shop_name"] == "Map Picked Truck Repair"
+        assert body["business_id"] == str(biz.id)
+        assert body["call_type"] == "scheduled"
+        # Re-assign by free-text name while still looking
+        r = client.post(f"{BASE}/{wo['id']}/assign-shop", headers=h,
+                        json={"shop_name": "Backup Shop LLC"})
+        assert r.json()["shop_name"] == "Backup Shop LLC"
+        assert r.json()["business_id"] is None
+        # Neither id nor name is rejected
+        assert client.post(f"{BASE}/{wo['id']}/assign-shop", headers=h,
+                           json={}).status_code == 422
 
     def test_create_requires_unit(self, client, db):
         _, h = fleet_user(client, db, "wo-unit@example.com")

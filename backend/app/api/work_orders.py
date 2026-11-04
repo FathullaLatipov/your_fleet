@@ -290,6 +290,47 @@ def send_request(wo_id: uuid.UUID, body: SendIn, user: User = Depends(fleet_user
     return _wo_out(db, wo, detail=True)
 
 
+class AssignIn(BaseModel):
+    business_id: uuid.UUID | None = None
+    shop_name: str | None = Field(default=None, max_length=255)
+    call_type: str | None = Field(default=None, pattern="^(scheduled|roadside)$")
+
+
+@router.post("/{wo_id}/assign-shop")
+def assign_shop(wo_id: uuid.UUID, body: AssignIn, user: User = Depends(fleet_user),
+                db: Session = Depends(get_db)):
+    """Assign Shop Directly — from the map/profile picker or by name.
+
+    Works while the order is open or still looking for a shop; an open order
+    moves to looking_for_shop.
+    """
+    wo = _own_wo(db, user, wo_id)
+    _require_status(wo, WorkOrderStatus.OPEN, WorkOrderStatus.LOOKING_FOR_SHOP)
+    if body.business_id is None and not (body.shop_name and body.shop_name.strip()):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Pick a shop from the directory or type its name")
+    if body.business_id is not None:
+        biz = db.get(Business, body.business_id)
+        if biz is None:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unknown shop")
+        wo.business_id = biz.id
+        wo.shop_name = biz.name
+    else:
+        wo.business_id = None
+        wo.shop_name = body.shop_name.strip()
+    if body.call_type:
+        wo.call_type = body.call_type
+    elif wo.call_type is None:
+        wo.call_type = "scheduled"
+    note = f"Shop assigned: {wo.shop_name}"
+    if wo.status == WorkOrderStatus.OPEN:
+        _transition(db, wo, user, WorkOrderStatus.LOOKING_FOR_SHOP, note=note)
+    else:
+        _event(db, wo, user, note=note)
+    db.commit()
+    return _wo_out(db, wo, detail=True)
+
+
 # ---------------------------------------------------------------- quotes
 
 class QuoteIn(BaseModel):

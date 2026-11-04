@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { BookingForm } from "@/components/BookingForm";
@@ -105,6 +105,29 @@ function BusinessPageInner() {
   const [bookingOffer, setBookingOffer] = useState<string | null>(null);
   const [favorite, setFavorite] = useState(false);
 
+  // Shop-picker mode: arrived from a work order looking for a shop.
+  const router = useRouter();
+  const assignWo = qs.get("assign_wo");
+  const woNumber = qs.get("wo");
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  async function assignToWorkOrder() {
+    if (!assignWo) return;
+    setAssigning(true);
+    setAssignError(null);
+    try {
+      await api(`/api/fleet/work-orders/${assignWo}/assign-shop`, {
+        method: "POST",
+        body: { business_id: id },
+      });
+      router.push(`/work-orders/${assignWo}`);
+    } catch (e) {
+      setAssignError(e instanceof Error ? e.message : "Couldn't assign the shop");
+      setAssigning(false);
+    }
+  }
+
   useEffect(() => {
     api<BusinessDetail>(`/api/businesses/${id}`).then(setB).catch((e) => setError(e.message));
     api<Review[]>(`/api/businesses/${id}/reviews`).then(setReviews).catch(() => {});
@@ -144,6 +167,24 @@ function BusinessPageInner() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
+      {/* Shop-picker banner: assign this shop to the work order */}
+      {assignWo && (
+        <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-pine/40 bg-pine-wash px-4 py-3">
+          <p className="text-sm font-semibold text-pine">
+            Assign {b.name} to {woNumber ? `WO-${woNumber}` : "your work order"}?
+          </p>
+          {assignError && <p className="text-sm font-medium text-danger">{assignError}</p>}
+          <div className="ml-auto flex gap-2">
+            <button className="btn !py-1.5 text-sm" disabled={assigning}
+                    onClick={() => void assignToWorkOrder()}>
+              {assigning ? "Assigning…" : "Assign Shop"}
+            </button>
+            <Link href={`/work-orders/${assignWo}`} className="btn-quiet !py-1.5 text-sm">
+              Back to request
+            </Link>
+          </div>
+        </div>
+      )}
       {/* Hero: photo or illustrated cover with identity overlay */}
       <div className="relative h-60 overflow-hidden rounded-2xl shadow-(--shadow-card) sm:h-72">
         {b.photos.length > 0 ? (

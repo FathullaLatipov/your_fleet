@@ -51,6 +51,32 @@ function SearchPageInner() {
   const [facets, setFacets] = useState<Facets | null>(null);
   const [mapItems, setMapItems] = useState<MapPoint[]>([]);
 
+  // Shop-picker mode: /search?assign_wo=<id>&wo=<number> assigns the chosen
+  // shop to that work order instead of just browsing.
+  const assignWo = params.get("assign_wo");
+  const woNumber = params.get("wo");
+  const [assigning, setAssigning] = useState("");
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const assignQuery = assignWo
+    ? `?assign_wo=${assignWo}${woNumber ? `&wo=${woNumber}` : ""}`
+    : "";
+
+  const assignShop = useCallback(async (businessId: string) => {
+    if (!assignWo) return;
+    setAssigning(businessId);
+    setAssignError(null);
+    try {
+      await api(`/api/fleet/work-orders/${assignWo}/assign-shop`, {
+        method: "POST",
+        body: { business_id: businessId },
+      });
+      router.push(`/work-orders/${assignWo}`);
+    } catch (e) {
+      setAssignError(e instanceof Error ? e.message : "Couldn't assign the shop");
+      setAssigning("");
+    }
+  }, [assignWo, router]);
+
   useEffect(() => {
     api<{ facets: Facets }>("/api/stats/public")
       .then((d) => setFacets(d.facets))
@@ -162,6 +188,20 @@ function SearchPageInner() {
 
   return (
     <div className="mx-auto flex h-[calc(100vh-3.5rem)] max-w-[1600px] flex-col">
+      {/* Shop-picker banner */}
+      {assignWo && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-pine/30 bg-pine-wash px-4 py-2.5">
+          <p className="text-sm font-semibold text-pine">
+            Choosing a shop for {woNumber ? `WO-${woNumber}` : "your work order"} — hit
+            &quot;Assign&quot; on a shop (list, map pin, or its profile).
+          </p>
+          {assignError && <p className="text-sm font-medium text-danger">{assignError}</p>}
+          <Link href={`/work-orders/${assignWo}`}
+                className="ml-auto text-sm font-semibold text-steel hover:text-ink">
+            Cancel ✕
+          </Link>
+        </div>
+      )}
       {/* Toolbar */}
       <div className="border-b border-line bg-panel px-4 py-3">
         <form onSubmit={submitLocation} className="flex flex-wrap items-center gap-2">
@@ -280,7 +320,7 @@ function SearchPageInner() {
                 return (
                   <Link
                     key={b.id}
-                    href={`/business/${b.id}`}
+                    href={`/business/${b.id}${assignQuery}`}
                     className="shop-card flex gap-3 !p-3"
                     data-active={b.id === activeId}
                     onMouseEnter={() => setActiveId(b.id)}
@@ -322,6 +362,19 @@ function SearchPageInner() {
                         {status.label}
                       </p>
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                        {assignWo && (
+                          <button
+                            className="btn !px-3 !py-1 !text-xs"
+                            disabled={assigning !== ""}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              void assignShop(b.id);
+                            }}
+                          >
+                            {assigning === b.id ? "Assigning…" : "Assign"}
+                          </button>
+                        )}
                         <TrustBadges b={b} compact />
                         {b.is_mobile_service && (
                           <span className="rounded bg-pine-wash px-1.5 py-0.5 text-xs font-medium text-pine">Mobile</span>
@@ -358,7 +411,9 @@ function SearchPageInner() {
 
         {/* Map */}
         <div className={`relative min-h-0 flex-1 ${showMap ? "" : "hidden lg:block"}`}>
-          <MapView items={mapItems.length ? mapItems : items} activeId={activeId} onSelect={setActiveId} />
+          <MapView items={mapItems.length ? mapItems : items} activeId={activeId} onSelect={setActiveId}
+                   onAssign={assignWo ? (id) => void assignShop(id) : undefined}
+                   profileQuery={assignQuery || undefined} />
           <div className="absolute bottom-3 left-3 z-[500] rounded-md border border-line bg-panel/95 px-3 py-2 text-xs text-steel shadow">
             <span className="mr-3 inline-flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-charcoal" /> Directory
