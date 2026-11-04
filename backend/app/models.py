@@ -455,6 +455,148 @@ class CommLogEntry(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+# ---------------------------------------------------------------- work orders
+
+class WorkOrderStatus(str, enum.Enum):
+    OPEN = "open"
+    LOOKING_FOR_SHOP = "looking_for_shop"
+    QUOTE_RECEIVED = "quote_received"
+    APPROVED = "approved"
+    IN_PROGRESS = "in_progress"
+    READY = "ready"
+    CLOSED = "closed"
+
+
+class WorkOrderServiceType(str, enum.Enum):
+    REPAIR = "repair"
+    PREVENTIVE = "preventive"
+    INSPECTION = "inspection"
+    OTHER = "other"
+
+
+class WorkOrderPriority(str, enum.Enum):
+    NORMAL = "normal"
+    URGENT = "urgent"
+    ROADSIDE = "roadside"
+
+
+class WorkOrderPayMethod(str, enum.Enum):
+    DRIVER_PAID = "driver_paid"
+    EFS = "efs"
+    COMCHEK = "comchek"
+    ZELLE = "zelle"
+    ACH = "ach"
+
+
+class QuoteStatus(str, enum.Enum):
+    PENDING = "pending"
+    ACCEPTED = "accepted"
+    DECLINED = "declined"
+
+
+class WorkOrder(Base):
+    """Carrier-side repair work order.
+
+    Flow: open -> looking_for_shop -> quote_received -> approved ->
+    in_progress -> ready -> closed. Transitions are enforced in the API and
+    recorded as WorkOrderEvent rows. Closing requires an uploaded invoice and
+    flips the unit back to available.
+    """
+
+    __tablename__ = "work_orders"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    wo_number: Mapped[int] = mapped_column(Integer)  # per-owner sequence (1, 2, ...)
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    trailer_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("trailers.id"))
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("fleet_drivers.id"))
+    service_type: Mapped[WorkOrderServiceType] = mapped_column(
+        str_enum(WorkOrderServiceType), default=WorkOrderServiceType.REPAIR
+    )
+    priority: Mapped[WorkOrderPriority] = mapped_column(
+        str_enum(WorkOrderPriority), default=WorkOrderPriority.NORMAL
+    )
+    call_type: Mapped[str | None] = mapped_column(String(16))  # scheduled | roadside
+    status: Mapped[WorkOrderStatus] = mapped_column(
+        str_enum(WorkOrderStatus), default=WorkOrderStatus.OPEN, index=True
+    )
+    description: Mapped[str] = mapped_column(Text)
+    # Assigned shop: a directory listing and/or a free-text name.
+    business_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("businesses.id"))
+    shop_name: Mapped[str | None] = mapped_column(String(255))
+    shop_confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Closing details.
+    final_amount_cents: Mapped[int | None] = mapped_column(Integer)
+    discount_cents: Mapped[int | None] = mapped_column(Integer)
+    payment_method: Mapped[WorkOrderPayMethod | None] = mapped_column(str_enum(WorkOrderPayMethod))
+    closing_notes: Mapped[str | None] = mapped_column(Text)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "wo_number", name="uq_wo_number"),
+        CheckConstraint(
+            "vehicle_id IS NOT NULL OR trailer_id IS NOT NULL", name="ck_wo_has_unit"
+        ),
+    )
+
+
+class WorkOrderQuote(Base):
+    """A quote recorded for a work order (from a directory shop or free-text)."""
+
+    __tablename__ = "work_order_quotes"
+
+    id: Mapped[uuid.UUID] = pk()
+    work_order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("work_orders.id"), index=True)
+    business_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("businesses.id"))
+    shop_name: Mapped[str] = mapped_column(String(255))
+    price_cents: Mapped[int | None] = mapped_column(Integer)
+    eta: Mapped[str | None] = mapped_column(String(128))  # "2 days" / completion date
+    note: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[QuoteStatus] = mapped_column(
+        str_enum(QuoteStatus), default=QuoteStatus.PENDING
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (CheckConstraint("price_cents IS NULL OR price_cents >= 0",
+                                      name="ck_quote_price"),)
+
+
+class WorkOrderEvent(Base):
+    """Status history and notes for a work order."""
+
+    __tablename__ = "work_order_events"
+
+    id: Mapped[uuid.UUID] = pk()
+    work_order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("work_orders.id"), index=True)
+    actor_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    from_status: Mapped[str | None] = mapped_column(String(32))
+    to_status: Mapped[str | None] = mapped_column(String(32))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class WorkOrderAttachment(Base):
+    """File attached to a work order: request photos, the shop invoice,
+    payment proof. Files live in the media dir under random names and are
+    served only through the authorized endpoint."""
+
+    __tablename__ = "work_order_attachments"
+
+    id: Mapped[uuid.UUID] = pk()
+    work_order_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("work_orders.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(16))  # photo | invoice | payment_proof
+    filename: Mapped[str] = mapped_column(String(64))
+    original_name: Mapped[str | None] = mapped_column(String(255))
+    content_type: Mapped[str | None] = mapped_column(String(64))
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 # ---------------------------------------------------------------- import provenance
 
 class ImportBatch(Base):

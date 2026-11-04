@@ -107,6 +107,12 @@ const ICONS: Record<string, React.ReactNode> = {
   chart: (
     <path d="M4 20V10M10 20V4M16 20v-8M21 20H3" strokeLinecap="round" />
   ),
+  clipboard: (
+    <>
+      <rect x="5" y="4.5" width="14" height="16" rx="2" />
+      <path d="M9 4.5V3h6v1.5M8.5 10h7M8.5 13.5h7M8.5 17h4.5" />
+    </>
+  ),
 };
 
 function NavIcon({ name, className = "h-4.5 w-4.5 shrink-0" }: { name: string; className?: string }) {
@@ -211,6 +217,7 @@ export function AppShell({ title, children }: { title: string; children: React.R
     {
       label: "Operations",
       items: [
+        { href: "/work-orders", label: "Work orders", icon: "clipboard" },
         { href: "/issues", label: "Issues", icon: "alert" },
         { href: "/tasks", label: "Tasks", icon: "check" },
         { href: "/deadlines", label: "Deadlines", icon: "calendar" },
