@@ -76,6 +76,13 @@ class User(Base):
     dot_number: Mapped[str | None] = mapped_column(String(32))
     role: Mapped[UserRole] = mapped_column(str_enum(UserRole), default=UserRole.DRIVER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Email verification: set immediately when email sending isn't configured,
+    # otherwise set once the 6-digit code is confirmed. Login requires it
+    # whenever email sending is on.
+    email_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verify_code_hash: Mapped[str | None] = mapped_column(String(64))
+    verify_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verify_attempts: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 

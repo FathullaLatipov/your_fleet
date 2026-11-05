@@ -43,7 +43,20 @@ function LoginInner() {
           <input id="password" type="password" required className="field mt-1" value={password}
                  onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         </div>
-        {error && <p className="text-sm font-medium text-danger">{error}</p>}
+        {error && (
+          <p className="text-sm font-medium text-danger">
+            {error}
+            {/not verified/i.test(error) && email && (
+              <>
+                {" "}
+                <Link href={`/register?verify=${encodeURIComponent(email)}`}
+                      className="font-semibold text-pine hover:underline">
+                  Enter the code →
+                </Link>
+              </>
+            )}
+          </p>
+        )}
         <button className="btn w-full" disabled={busy}>{busy ? "Signing in…" : "Sign in"}</button>
       </form>
       <p className="mt-4 text-sm text-steel">

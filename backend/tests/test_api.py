@@ -44,8 +44,10 @@ def make_business(db, name="Test Truck Repair", lat=32.78, lng=-96.80, **kw):
 
 
 def make_user(db, email, role=UserRole.DRIVER, password="password123"):
+    from app.models import utcnow
+
     u = User(email=email, password_hash=hash_password(password),
-             full_name="Test User", role=role)
+             full_name="Test User", role=role, email_verified_at=utcnow())
     db.add(u)
     db.commit()
     return u

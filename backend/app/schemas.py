@@ -65,6 +65,15 @@ class TokenOut(BaseModel):
     token_type: str = "bearer"
 
 
+class VerifyEmailIn(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=4, max_length=8)
+
+
+class ResendCodeIn(BaseModel):
+    email: EmailStr
+
+
 class UserOut(ORMModel):
     id: uuid.UUID
     email: EmailStr
@@ -73,6 +82,7 @@ class UserOut(ORMModel):
     carrier_name: str | None
     mc_number: str | None
     dot_number: str | None
+    email_verified_at: datetime | None
     role: UserRole
     created_at: datetime
 
