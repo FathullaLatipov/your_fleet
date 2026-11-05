@@ -29,6 +29,7 @@ from app.models import (
     Trailer,
     User,
     Vehicle,
+    VehicleDocument,
     VehicleExpense,
     utcnow,
 )
@@ -356,6 +357,20 @@ def my_deadlines(user: User = Depends(fleet_user), db: Session = Depends(get_db)
             ("vehicle_inspection", "Inspection", v.inspection_expires_at),
         ):
             entry = _date_deadline(kind, label, ref, v.id, dt, now)
+            if entry:
+                out.append(entry)
+
+    if vehicles:
+        from app.api.fleet_assets import DOC_KINDS
+        docs = db.execute(select(VehicleDocument).where(
+            VehicleDocument.vehicle_id.in_(units.keys()),
+            VehicleDocument.expires_at.is_not(None),
+        )).scalars().all()
+        for doc in docs:
+            label = doc.title or DOC_KINDS.get(doc.kind, doc.kind)
+            entry = _date_deadline("vehicle_document", label,
+                                   f"Unit {units.get(doc.vehicle_id, '')}",
+                                   doc.vehicle_id, doc.expires_at, now)
             if entry:
                 out.append(entry)
 

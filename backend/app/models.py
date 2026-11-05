@@ -392,6 +392,29 @@ class Trailer(Base):
     )
 
 
+class VehicleDocument(Base):
+    """Compliance paper tracked per truck: IRP registration, insurance
+    certificate, DOT annual inspection, IFTA, Form 2290, title. The file
+    itself is optional; expiry dates feed the deadlines board."""
+
+    __tablename__ = "vehicle_documents"
+
+    id: Mapped[uuid.UUID] = pk()
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    kind: Mapped[str] = mapped_column(String(32))
+    # registration | insurance | annual_inspection | ifta | hvut_2290 | title | other
+    title: Mapped[str | None] = mapped_column(String(128))  # custom label for "other"
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    filename: Mapped[str | None] = mapped_column(String(64))
+    original_name: Mapped[str | None] = mapped_column(String(255))
+    content_type: Mapped[str | None] = mapped_column(String(64))
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+
 class VehicleLoan(Base):
     """Financing on a truck. The amortization schedule is derived, never
     stored: payment i is due i months after start_date, and a payment is

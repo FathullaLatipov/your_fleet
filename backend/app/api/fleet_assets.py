@@ -3,19 +3,26 @@
 Same conventions as fleet.py: everything scoped to the authenticated owner,
 document warnings in the TMS-export style, plain dict responses.
 """
+import secrets
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.fleet import fleet_user
+from app.api.work_orders import _media_dir, _sniff
 from app.db import get_db
-from app.models import FleetDriver, Trailer, TrailerStatus, User, Vehicle, utcnow
+from app.models import (
+    FleetDriver, Trailer, TrailerStatus, User, Vehicle, VehicleDocument, utcnow,
+)
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"])
+
+MAX_DOC_BYTES = 10 * 1024 * 1024
 
 
 def _aware(dt: datetime | None) -> datetime | None:
@@ -301,3 +308,161 @@ def delete_driver(driver_id: uuid.UUID, user: User = Depends(fleet_user),
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Driver not found")
     db.delete(d)
     db.commit()
+
+
+# ------------------------------------------------------------------ vehicle documents
+
+DOC_KINDS = {
+    "registration": "IRP registration / cab card",
+    "insurance": "Certificate of insurance",
+    "annual_inspection": "DOT annual inspection",
+    "ifta": "IFTA license & decals",
+    "hvut_2290": "Form 2290 (HVUT) Schedule 1",
+    "title": "Certificate of title",
+    "other": "Other document",
+}
+
+
+def _doc_status(expires_at: datetime | None) -> str:
+    if expires_at is None:
+        return "no_expiry"
+    now = utcnow()
+    dt = _aware(expires_at)
+    if dt < now:
+        return "overdue"
+    if (dt - now).days <= 30:
+        return "due_soon"
+    return "valid"
+
+
+def _doc_out(doc: VehicleDocument) -> dict:
+    return {
+        "id": str(doc.id),
+        "kind": doc.kind,
+        "label": doc.title or DOC_KINDS.get(doc.kind, doc.kind),
+        "expires_at": _iso(doc.expires_at),
+        "status": _doc_status(doc.expires_at),
+        "has_file": doc.filename is not None,
+        "original_name": doc.original_name,
+        "content_type": doc.content_type,
+        "created_at": _iso(doc.created_at),
+    }
+
+
+def _own_vehicle_here(vehicle_id: uuid.UUID, user: User, db: Session) -> Vehicle:
+    v = db.get(Vehicle, vehicle_id)
+    if v is None or v.owner_user_id != user.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Vehicle not found")
+    return v
+
+
+def _own_doc(db: Session, user: User, vehicle_id: uuid.UUID,
+             doc_id: uuid.UUID) -> VehicleDocument:
+    _own_vehicle_here(vehicle_id, user, db)
+    doc = db.get(VehicleDocument, doc_id)
+    if doc is None or doc.vehicle_id != vehicle_id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
+    return doc
+
+
+@router.get("/vehicles/{vehicle_id}/documents")
+def list_documents(vehicle_id: uuid.UUID, user: User = Depends(fleet_user),
+                   db: Session = Depends(get_db)):
+    _own_vehicle_here(vehicle_id, user, db)
+    docs = db.execute(
+        select(VehicleDocument).where(VehicleDocument.vehicle_id == vehicle_id)
+        .order_by(VehicleDocument.created_at)
+    ).scalars().all()
+    return {"documents": [_doc_out(d) for d in docs],
+            "kinds": [{"kind": k, "label": v} for k, v in DOC_KINDS.items()]}
+
+
+class DocumentIn(BaseModel):
+    kind: str = Field(pattern="^(registration|insurance|annual_inspection|ifta|hvut_2290|title|other)$")
+    title: str | None = Field(default=None, max_length=128)
+    expires_at: datetime | None = None
+
+
+@router.post("/vehicles/{vehicle_id}/documents", status_code=201)
+def create_document(vehicle_id: uuid.UUID, body: DocumentIn,
+                    user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    _own_vehicle_here(vehicle_id, user, db)
+    doc = VehicleDocument(vehicle_id=vehicle_id, kind=body.kind,
+                          title=(body.title or None), expires_at=body.expires_at)
+    db.add(doc)
+    db.commit()
+    return _doc_out(doc)
+
+
+class DocumentUpdateIn(BaseModel):
+    title: str | None = Field(default=None, max_length=128)
+    expires_at: datetime | None = None
+
+
+@router.patch("/vehicles/{vehicle_id}/documents/{doc_id}")
+def update_document(vehicle_id: uuid.UUID, doc_id: uuid.UUID, body: DocumentUpdateIn,
+                    user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    doc = _own_doc(db, user, vehicle_id, doc_id)
+    data = body.model_dump(exclude_unset=True)
+    if "title" in data:
+        doc.title = data["title"] or None
+    if "expires_at" in data:
+        doc.expires_at = data["expires_at"]
+    db.commit()
+    return _doc_out(doc)
+
+
+@router.delete("/vehicles/{vehicle_id}/documents/{doc_id}", status_code=204)
+def delete_document(vehicle_id: uuid.UUID, doc_id: uuid.UUID,
+                    user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    doc = _own_doc(db, user, vehicle_id, doc_id)
+    if doc.filename:
+        try:
+            (_media_dir() / doc.filename).unlink(missing_ok=True)
+        except OSError:
+            pass
+    db.delete(doc)
+    db.commit()
+
+
+@router.post("/vehicles/{vehicle_id}/documents/{doc_id}/file")
+async def upload_document_file(vehicle_id: uuid.UUID, doc_id: uuid.UUID,
+                               file: UploadFile,
+                               user: User = Depends(fleet_user),
+                               db: Session = Depends(get_db)):
+    doc = _own_doc(db, user, vehicle_id, doc_id)
+    data = await file.read(MAX_DOC_BYTES + 1)
+    if len(data) > MAX_DOC_BYTES:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "File exceeds 10 MB")
+    sniffed = _sniff(data[:16])
+    if sniffed is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            "Only PDF, JPEG, PNG or WebP files are accepted")
+    ext, ctype = sniffed
+    if doc.filename:  # replace the old file
+        try:
+            (_media_dir() / doc.filename).unlink(missing_ok=True)
+        except OSError:
+            pass
+    filename = f"doc-{secrets.token_hex(16)}.{ext}"
+    (_media_dir() / filename).write_bytes(data)
+    doc.filename = filename
+    doc.original_name = file.filename or None
+    doc.content_type = ctype
+    doc.uploaded_by = user.id
+    db.commit()
+    return _doc_out(doc)
+
+
+@router.get("/vehicles/{vehicle_id}/documents/{doc_id}/file")
+def download_document_file(vehicle_id: uuid.UUID, doc_id: uuid.UUID,
+                           user: User = Depends(fleet_user),
+                           db: Session = Depends(get_db)):
+    doc = _own_doc(db, user, vehicle_id, doc_id)
+    if not doc.filename:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No file on this document")
+    path = _media_dir() / doc.filename
+    if not path.is_file():
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "File is missing")
+    return FileResponse(path, media_type=doc.content_type or "application/octet-stream",
+                        filename=doc.original_name or doc.filename)

@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     admin, auth, bookings, businesses, claims, fleet, fleet_assets,
-    fleet_finance, fleet_ops, me, offers, reviews, work_orders,
+    fleet_finance, fleet_ops, fleet_reports, me, offers, reviews, work_orders,
 )
 from app.config import get_settings
 
@@ -28,7 +28,7 @@ app.add_middleware(
 for router in (auth.router, businesses.router, claims.router, offers.router,
                bookings.router, reviews.router, me.router, fleet.router,
                fleet_assets.router, fleet_finance.router, fleet_ops.router,
-               work_orders.router, admin.router):
+               fleet_reports.router, work_orders.router, admin.router):
     app.include_router(router)
 
 _media = Path(settings.media_dir)

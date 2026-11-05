@@ -31,7 +31,243 @@ interface ShopOptions {
   options: BusinessListItem[];
 }
 
-type Tab = "overview" | "maintenance" | "defects" | "costs" | "history";
+type Tab = "overview" | "maintenance" | "defects" | "docs" | "costs" | "history";
+
+/* Contract for /api/fleet/vehicles/{id}/documents. */
+interface VehicleDoc {
+  id: string;
+  kind: string;
+  label: string;
+  expires_at: string | null;
+  status: "valid" | "due_soon" | "overdue" | "no_expiry";
+  has_file: boolean;
+  original_name: string | null;
+}
+interface DocsResponse {
+  documents: VehicleDoc[];
+  kinds: { kind: string; label: string }[];
+}
+
+const DOCS_API_URL =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
+
+function docsAuth(): Record<string, string> {
+  try {
+    const t = localStorage.getItem("yf_token");
+    return t ? { Authorization: `Bearer ${t}` } : {};
+  } catch {
+    return {};
+  }
+}
+
+const DOC_STATUS_BADGE: Record<VehicleDoc["status"], [string, string]> = {
+  valid: ["valid", "bg-pine-wash text-pine"],
+  due_soon: ["due soon", "bg-amber-wash text-amber-ink"],
+  overdue: ["overdue", "bg-danger-wash text-danger"],
+  no_expiry: ["no expiry", "bg-mist text-steel"],
+};
+
+function DocumentsSection({ vehicleId }: { vehicleId: string }) {
+  const [data, setData] = useState<DocsResponse | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState("");
+  const [addOpen, setAddOpen] = useState(false);
+  const [form, setForm] = useState({ kind: "registration", title: "", expires: "" });
+
+  const base = `/api/fleet/vehicles/${vehicleId}/documents`;
+  const load = useCallback(() => {
+    api<DocsResponse>(base).then(setData).catch((e) => setErr(e instanceof Error ? e.message : "Failed"));
+  }, [base]);
+  useEffect(load, [load]);
+
+  async function add(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy("add");
+    setErr(null);
+    try {
+      await api(base, {
+        method: "POST",
+        body: {
+          kind: form.kind,
+          title: form.kind === "other" ? form.title.trim() || null : null,
+          expires_at: form.expires ? new Date(form.expires).toISOString() : null,
+        },
+      });
+      setForm({ kind: "registration", title: "", expires: "" });
+      setAddOpen(false);
+      load();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "Couldn't add the document");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function uploadFile(doc: VehicleDoc, file: File) {
+    setBusy(`up:${doc.id}`);
+    setErr(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`${DOCS_API_URL}${base}/${doc.id}/file`, {
+        method: "POST", headers: docsAuth(), body: fd,
+      });
+      if (!res.ok) {
+        const d = await res.json().catch(() => null);
+        throw new Error(d && typeof d === "object" && "detail" in d && typeof d.detail === "string"
+          ? d.detail : `Upload failed (${res.status})`);
+      }
+      load();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "Upload failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function downloadFile(doc: VehicleDoc) {
+    setBusy(`dl:${doc.id}`);
+    try {
+      const res = await fetch(`${DOCS_API_URL}${base}/${doc.id}/file`, { headers: docsAuth() });
+      if (!res.ok) throw new Error(`Download failed (${res.status})`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = doc.original_name ?? `${doc.kind}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "Download failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function removeDoc(doc: VehicleDoc) {
+    if (!window.confirm(`Remove "${doc.label}"${doc.has_file ? " and its file" : ""}?`)) return;
+    try {
+      await api(`${base}/${doc.id}`, { method: "DELETE" });
+      load();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "Delete failed");
+    }
+  }
+
+  async function setExpiry(doc: VehicleDoc, value: string) {
+    try {
+      await api(`${base}/${doc.id}`, {
+        method: "PATCH",
+        body: { expires_at: value ? new Date(value).toISOString() : null },
+      });
+      load();
+    } catch (e2) {
+      setErr(e2 instanceof Error ? e2.message : "Save failed");
+    }
+  }
+
+  if (!data) return <Loader />;
+
+  return (
+    <section className="card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold">Documents</h2>
+          <p className="mt-0.5 text-sm text-steel">
+            Registration, insurance, inspections, IFTA, 2290 — expiry dates feed the Deadlines board.
+          </p>
+        </div>
+        <button className="btn !py-2 text-sm" onClick={() => setAddOpen(!addOpen)}>
+          {addOpen ? "Close" : "+ Add document"}
+        </button>
+      </div>
+
+      {addOpen && (
+        <form onSubmit={add}
+              className="mt-4 grid gap-3 rounded-lg border border-dashed border-line bg-mist/50 p-4 sm:grid-cols-3">
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="vd-kind">Type</label>
+            <select id="vd-kind" className="field mt-1" value={form.kind}
+                    onChange={(e) => setForm({ ...form, kind: e.target.value })}>
+              {data.kinds.map((k) => <option key={k.kind} value={k.kind}>{k.label}</option>)}
+            </select>
+          </div>
+          {form.kind === "other" && (
+            <div>
+              <label className="text-sm font-medium text-steel" htmlFor="vd-title">Name</label>
+              <input id="vd-title" className="field mt-1" placeholder="What is this document?"
+                     value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+            </div>
+          )}
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="vd-exp">Expires</label>
+            <input id="vd-exp" type="date" className="field mt-1" value={form.expires}
+                   onChange={(e) => setForm({ ...form, expires: e.target.value })} />
+          </div>
+          <div className="flex items-end">
+            <button className="btn" disabled={busy === "add"}>{busy === "add" ? "Adding…" : "Add"}</button>
+          </div>
+        </form>
+      )}
+
+      {err && <p className="mt-3 text-sm font-medium text-danger">{err}</p>}
+
+      {data.documents.length === 0 ? (
+        <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-8 text-center text-sm text-steel">
+          No documents on file for this truck yet.
+        </p>
+      ) : (
+        <ul className="mt-4 divide-y divide-line/60">
+          {data.documents.map((doc) => {
+            const [sLabel, sCls] = DOC_STATUS_BADGE[doc.status];
+            return (
+              <li key={doc.id} className="flex flex-wrap items-center gap-x-4 gap-y-2 py-3">
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold">{doc.label}</p>
+                  <p className="mt-0.5 text-sm text-steel">
+                    {doc.has_file ? (doc.original_name ?? "file attached") : "No file uploaded"}
+                  </p>
+                </div>
+                <label className="text-xs text-steel">
+                  expires{" "}
+                  <input type="date" className="field inline-block !w-36 !py-1 text-xs"
+                         defaultValue={doc.expires_at ? doc.expires_at.slice(0, 10) : ""}
+                         onBlur={(e) => {
+                           const cur = doc.expires_at ? doc.expires_at.slice(0, 10) : "";
+                           if (e.target.value !== cur) void setExpiry(doc, e.target.value);
+                         }} />
+                </label>
+                <span className={`rounded px-2 py-0.5 text-xs font-semibold ${sCls}`}>{sLabel}</span>
+                <label className="btn-quiet inline-block cursor-pointer !py-1.5 text-xs">
+                  {busy === `up:${doc.id}` ? "Uploading…" : doc.has_file ? "Replace file" : "Upload file"}
+                  <input type="file" className="hidden"
+                         accept="application/pdf,image/jpeg,image/png,image/webp"
+                         onChange={(e) => {
+                           const f = e.target.files?.[0];
+                           if (f) void uploadFile(doc, f);
+                           e.target.value = "";
+                         }} />
+                </label>
+                {doc.has_file && (
+                  <button className="btn-quiet !py-1.5 text-xs" disabled={busy !== ""}
+                          onClick={() => void downloadFile(doc)}>
+                    {busy === `dl:${doc.id}` ? "…" : "Download"}
+                  </button>
+                )}
+                <button className="btn-danger !py-1.5 text-xs" onClick={() => void removeDoc(doc)}>
+                  Remove
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
+  );
+}
 
 /* Schedule title -> service-catalog slug, so "Find a shop" lands pre-filtered. */
 const TITLE_SERVICE: [string, string][] = [
@@ -276,6 +512,7 @@ function VehicleInner() {
     ["overview", "Overview", null],
     ["maintenance", "Maintenance", dueCount || null],
     ["defects", "PTI defects", openDefects || null],
+    ["docs", "Documents", null],
     ["costs", "Costs", v.expenses_total_cents ? fmtUsd(v.expenses_total_cents) : null],
     ["history", "History", d.bookings.length || null],
   ];
@@ -616,6 +853,8 @@ function VehicleInner() {
             )}
           </section>
         )}
+
+        {tab === "docs" && <DocumentsSection vehicleId={id} />}
 
         {tab === "costs" && (
           <section className="card p-5">

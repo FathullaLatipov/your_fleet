@@ -172,14 +172,81 @@ function KpiCard({
   return <div className="card p-5">{body}</div>;
 }
 
+/* Open work orders, only what's needed for the to-do list. */
+interface WoLite {
+  id: string;
+  wo_number: number;
+  status: string;
+  unit_number: string | null;
+  trailer_unit: string | null;
+  accepted_quote_id: string | null;
+  quote_count: number;
+}
+
+interface TodoItem {
+  key: string;
+  text: string;
+  sub: string;
+  href: string;
+  urgent: boolean;
+}
+
+function buildTodos(workOrders: WoLite[], deadlines: Analytics["deadlines"]): TodoItem[] {
+  const items: TodoItem[] = [];
+  for (const wo of workOrders) {
+    const unit = wo.unit_number ? `#${wo.unit_number}` : wo.trailer_unit ? `trailer #${wo.trailer_unit}` : "";
+    const href = `/work-orders/${wo.id}`;
+    if (wo.status === "quote_received") {
+      items.push({
+        key: `wo-${wo.id}`,
+        text: wo.accepted_quote_id
+          ? `Approve the quote on WO-${wo.wo_number} (${unit})`
+          : `Review ${wo.quote_count} quote${wo.quote_count === 1 ? "" : "s"} on WO-${wo.wo_number} (${unit})`,
+        sub: "Repair is waiting on your decision",
+        href, urgent: true,
+      });
+    } else if (wo.status === "approved") {
+      items.push({
+        key: `wo-${wo.id}`,
+        text: `Confirm the shop took WO-${wo.wo_number} (${unit})`,
+        sub: "Work starts once the shop confirms receipt",
+        href, urgent: false,
+      });
+    } else if (wo.status === "ready") {
+      items.push({
+        key: `wo-${wo.id}`,
+        text: `Close WO-${wo.wo_number} (${unit}) — upload the invoice`,
+        sub: "The unit is ready at the shop",
+        href, urgent: true,
+      });
+    }
+  }
+  for (const d of deadlines.slice(0, 4)) {
+    items.push({
+      key: `dl-${d.vehicle_id}-${d.title}`,
+      text: `Renew ${d.title.toLowerCase()} for #${d.unit_number}`,
+      sub: d.status === "overdue" ? "Overdue"
+        : d.days_left != null ? `Due in ${d.days_left} days`
+        : d.miles_left != null ? `${Math.round(d.miles_left).toLocaleString()} mi left` : "Due soon",
+      href: `/fleet/${d.vehicle_id}`,
+      urgent: d.status === "overdue",
+    });
+  }
+  return items.sort((a, b) => Number(b.urgent) - Number(a.urgent)).slice(0, 7);
+}
+
 function DashboardInner() {
   const { user } = useAuth();
   const [data, setData] = useState<Analytics | null>(null);
+  const [workOrders, setWorkOrders] = useState<WoLite[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setError(null);
     api<Analytics>("/api/fleet/analytics").then(setData).catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
+    api<WoLite[]>("/api/fleet/work-orders", { params: { open_only: true } })
+      .then(setWorkOrders)
+      .catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -310,6 +377,40 @@ function DashboardInner() {
           )}
         </section>
       </div>
+
+      {/* To do: everything waiting on the owner, in one list */}
+      {(() => {
+        const todos = buildTodos(workOrders, data.deadlines);
+        if (todos.length === 0) return null;
+        return (
+          <section className="card mt-5 p-5">
+            <div className="flex items-baseline justify-between gap-3">
+              <h3 className="text-lg font-bold">To do</h3>
+              <span className="rounded-full bg-mist px-2.5 py-0.5 text-xs font-semibold text-steel">
+                {todos.length}
+              </span>
+            </div>
+            <ul className="-mx-2 mt-3 grid gap-x-6 sm:grid-cols-2">
+              {todos.map((t) => (
+                <li key={t.key}>
+                  <Link href={t.href}
+                        className="flex items-center justify-between gap-3 rounded-lg px-2 py-2 transition-colors hover:bg-mist">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{t.text}</span>
+                      <span className="block text-xs text-faint">{t.sub}</span>
+                    </span>
+                    {t.urgent && (
+                      <span className="shrink-0 rounded bg-cta/10 px-2 py-0.5 text-xs font-semibold text-cta">
+                        action
+                      </span>
+                    )}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </section>
+        );
+      })()}
 
       {/* Deadlines / defects / requests */}
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-3">

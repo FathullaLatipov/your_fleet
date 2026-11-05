@@ -116,6 +116,12 @@ const ICONS: Record<string, React.ReactNode> = {
   bank: (
     <path d="M3 21h18M5 21V10M19 21V10M9 21V10M15 21V10M2 10l10-7 10 7H2Z" strokeLinejoin="round" />
   ),
+  report: (
+    <>
+      <path d="M6 3.5h9l3.5 3.5v13.5H6V3.5Z" strokeLinejoin="round" />
+      <path d="M9 17v-3.5M12 17v-6M15 17v-4.5" strokeLinecap="round" />
+    </>
+  ),
 };
 
 function NavIcon({ name, className = "h-4.5 w-4.5 shrink-0" }: { name: string; className?: string }) {
@@ -236,7 +242,13 @@ export function AppShell({ title, children }: { title: string; children: React.R
         { href: "/loans", label: "Loans", icon: "bank" },
       ],
     },
-    { label: "Insights", items: [{ href: "/analytics", label: "Analytics", icon: "chart" }] },
+    {
+      label: "Insights",
+      items: [
+        { href: "/analytics", label: "Analytics", icon: "chart" },
+        { href: "/reports", label: "Reports", icon: "report" },
+      ],
+    },
   ];
   const siteItems: NavItem[] = [{ href: "/search", label: "Find repair", icon: "search" }];
   const allItems = [...groups.flatMap((g) => g.items), ...siteItems];
