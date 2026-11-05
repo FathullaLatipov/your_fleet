@@ -67,8 +67,9 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
         role=body.role,
     )
     if email_service.is_configured():
-        code = _issue_code(user)
         db.add(user)
+        db.flush()  # assigns user.id — the code hash is bound to it
+        code = _issue_code(user)
         db.commit()
         _send_code(user, code)
     else:

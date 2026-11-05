@@ -71,6 +71,19 @@ class TestEmailVerification:
         assert client.post("/api/auth/login", json={
             "email": REG["email"], "password": REG["password"]}).status_code == 200
 
+    def test_very_first_code_works(self, client, db, monkeypatch):
+        """Regression: the code mailed at signup must verify without a resend.
+
+        The hash is bound to user.id, which only exists after flush — issuing
+        the code before the flush made every first code 'wrong'.
+        """
+        box = enable_email(monkeypatch)
+        r = client.post("/api/auth/register", json={**REG, "email": "first@example.com"})
+        assert r.status_code == 201
+        r = client.post("/api/auth/verify-email",
+                        json={"email": "first@example.com", "code": box.last_code})
+        assert r.status_code == 200, r.text
+
     def test_verify_unknown_email(self, client, db, monkeypatch):
         enable_email(monkeypatch)
         assert client.post("/api/auth/verify-email",
