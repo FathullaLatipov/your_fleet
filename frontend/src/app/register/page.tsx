@@ -46,7 +46,8 @@ function RegisterInner() {
         method: "POST",
         body: {
           email, password, full_name: fullName, phone: phone || null, role,
-          carrier_name: role === "fleet_manager" ? carrierName.trim() || null : null,
+          carrier_name:
+            role === "fleet_manager" || role === "driver" ? carrierName.trim() || null : null,
           dot_number: role === "fleet_manager" ? dotNumber.trim() || null : null,
         },
       });
@@ -144,20 +145,23 @@ function RegisterInner() {
             ))}
           </div>
         </fieldset>
+        {(role === "fleet_manager" || role === "driver") && (
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="carrier">
+              Carrier name{role === "driver" && <span className="text-faint"> (optional)</span>}
+            </label>
+            <input id="carrier" required={role === "fleet_manager"} className="field mt-1"
+                   placeholder="VKL TRUCKING INC"
+                   value={carrierName} onChange={(e) => setCarrierName(e.target.value)}
+                   autoComplete="organization" />
+          </div>
+        )}
         {role === "fleet_manager" && (
-          <>
-            <div>
-              <label className="text-sm font-medium text-steel" htmlFor="carrier">Carrier name</label>
-              <input id="carrier" required className="field mt-1" placeholder="VKL TRUCKING INC"
-                     value={carrierName} onChange={(e) => setCarrierName(e.target.value)}
-                     autoComplete="organization" />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-steel" htmlFor="dot">DOT # (optional)</label>
-              <input id="dot" className="field mt-1" inputMode="numeric" placeholder="7654321"
-                     value={dotNumber} onChange={(e) => setDotNumber(e.target.value)} />
-            </div>
-          </>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="dot">DOT # (optional)</label>
+            <input id="dot" className="field mt-1" inputMode="numeric" placeholder="7654321"
+                   value={dotNumber} onChange={(e) => setDotNumber(e.target.value)} />
+          </div>
         )}
         <div>
           <label className="text-sm font-medium text-steel" htmlFor="name">
