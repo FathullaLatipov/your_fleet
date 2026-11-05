@@ -206,11 +206,11 @@ function SearchPageInner() {
       <div className="border-b border-line bg-panel px-4 py-3">
         <form onSubmit={submitLocation} className="flex flex-wrap items-center gap-2">
           <input
-            className="field !w-52"
-            placeholder="City, ST or ZIP"
+            className="field !w-64"
+            placeholder="City, ZIP, shop or service"
             value={location}
             onChange={(e) => setLocation(e.target.value)}
-            aria-label="Search location"
+            aria-label="Search by city, ZIP, shop name or service"
           />
           <button type="submit" className="btn !py-2">Search</button>
           <button type="button" onClick={useMyLocation} className="btn-quiet !py-2">
@@ -314,6 +314,18 @@ function SearchPageInner() {
             <div className="space-y-2.5 p-3">
               <p className="px-1 text-sm text-steel">
                 {data!.total.toLocaleString()} shop{data!.total === 1 ? "" : "s"} found
+                {data!.resolved_query && (
+                  <span className="ml-1.5 text-xs text-faint">
+                    {data!.resolved_query.mode === "area" && <>near &quot;{data!.resolved_query.label}&quot;</>}
+                    {data!.resolved_query.mode === "state" && <>across {data!.resolved_query.label}</>}
+                    {data!.resolved_query.mode === "category" && (
+                      <>in {CATEGORY_LABELS[data!.resolved_query.label] ?? data!.resolved_query.label}</>
+                    )}
+                    {data!.resolved_query.mode === "text" && (
+                      <>matching &quot;{data!.resolved_query.label}&quot; by name, type or service</>
+                    )}
+                  </span>
+                )}
               </p>
               {items.map((b) => {
                 const status = openStatus(b.hours);

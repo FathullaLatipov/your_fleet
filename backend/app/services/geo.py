@@ -152,7 +152,15 @@ def _apply_filters(f: SearchFilters, params: dict, conditions: list[str]) -> str
     """Non-geo filters; returns the extra SELECT columns for the full search."""
     if f.q:
         params["q"] = f"%{f.q.strip()}%"
-        conditions.append("(b.name ILIKE :q OR b.city ILIKE :q)")
+        # Free-text matches a shop by name, city, Google business type or a
+        # service in its catalog — one box, several honest ways to hit.
+        conditions.append(
+            "(b.name ILIKE :q OR b.city ILIKE :q"
+            " OR coalesce(b.google_primary_type, '') ILIKE :q"
+            " OR EXISTS (SELECT 1 FROM business_services bsq"
+            "            JOIN services sq ON sq.id = bsq.service_id"
+            "            WHERE bsq.business_id = b.id AND sq.name ILIKE :q))"
+        )
     if f.category:
         params["category"] = f.category
         conditions.append("b.category = :category")
@@ -215,7 +223,7 @@ def _apply_filters(f: SearchFilters, params: dict, conditions: list[str]) -> str
 
 
 def locate_area(db: Session, query: str) -> tuple[float, float] | None:
-    """Resolve 'ZIP' or 'City, ST' to a centroid of known businesses.
+    """Resolve 'ZIP', 'City, ST' or 'City ST' to a centroid of known businesses.
 
     Self-contained alternative to a geocoding API: honest for the dataset we
     have, documented as a limitation for addresses we don't cover.
@@ -228,16 +236,85 @@ def locate_area(db: Session, query: str) -> tuple[float, float] | None:
             text("SELECT avg(lat), avg(lng) FROM businesses WHERE zip_code = :z"),
             {"z": q[:5]},
         ).first()
-    else:
-        city, _, state = q.partition(",")
-        params = {"city": city.strip()}
+        return (float(row[0]), float(row[1])) if row and row[0] is not None else None
+
+    city, _, state = q.partition(",")
+    city, state = city.strip(), state.strip()
+    if not state:
+        # "Miami FL" without a comma: trailing 2-letter token is the state.
+        parts = city.split()
+        if len(parts) >= 2 and len(parts[-1]) == 2 and parts[-1].isalpha():
+            state, city = parts[-1], " ".join(parts[:-1])
+    for pattern in (city, f"{city}%"):  # exact first, then prefix
+        params: dict = {"city": pattern}
         cond = "city ILIKE :city"
-        if state.strip():
+        if state:
             cond += " AND state = :state"
-            params["state"] = state.strip().upper()[:2]
+            params["state"] = state.upper()[:2]
         row = db.execute(
             text(f"SELECT avg(lat), avg(lng) FROM businesses WHERE {cond}"), params
         ).first()
-    if row and row[0] is not None:
-        return float(row[0]), float(row[1])
+        if row and row[0] is not None:
+            return float(row[0]), float(row[1])
     return None
+
+
+US_STATES = {
+    "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+    "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+    "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+    "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+    "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+    "massachusetts": "MA", "michigan": "MI", "minnesota": "MN", "mississippi": "MS",
+    "missouri": "MO", "montana": "MT", "nebraska": "NE", "nevada": "NV",
+    "new hampshire": "NH", "new jersey": "NJ", "new mexico": "NM", "new york": "NY",
+    "north carolina": "NC", "north dakota": "ND", "ohio": "OH", "oklahoma": "OK",
+    "oregon": "OR", "pennsylvania": "PA", "rhode island": "RI",
+    "south carolina": "SC", "south dakota": "SD", "tennessee": "TN", "texas": "TX",
+    "utah": "UT", "vermont": "VT", "virginia": "VA", "washington": "WA",
+    "west virginia": "WV", "wisconsin": "WI", "wyoming": "WY",
+    "washington dc": "DC", "district of columbia": "DC",
+}
+STATE_CODES = set(US_STATES.values())
+
+# Whole-phrase keywords -> directory category. Only unambiguous terms; anything
+# else falls through to free-text matching.
+CATEGORY_KEYWORDS = {
+    "tire": "tire", "tires": "tire", "tire shop": "tire", "tire repair": "tire",
+    "llantera": "tire",
+    "towing": "towing", "tow": "towing", "tow truck": "towing", "wrecker": "towing",
+    "recovery": "towing",
+    "mobile": "mobile_mechanic", "mobile mechanic": "mobile_mechanic",
+    "mobile repair": "mobile_mechanic", "roadside": "mobile_mechanic",
+    "road service": "mobile_mechanic",
+    "truck repair": "truck_trailer", "truck shop": "truck_trailer",
+    "semi repair": "truck_trailer", "diesel": "truck_trailer",
+    "diesel repair": "truck_trailer", "trailer": "truck_trailer",
+    "trailer repair": "truck_trailer", "truck and trailer": "truck_trailer",
+    "truck & trailer": "truck_trailer", "mechanic": "truck_trailer",
+    "auto repair": "pickup_auto", "car repair": "pickup_auto",
+}
+
+
+def resolve_query(db: Session, raw: str) -> dict:
+    """One search box, interpreted in order of specificity:
+
+    ZIP / city -> a point to search around; a state code or name -> statewide;
+    a category keyword -> that category; anything else -> free-text match on
+    shop name, Google type or service. Returns {"mode": ...} with the fields
+    the mode needs.
+    """
+    q = " ".join(raw.split())
+    if not q:
+        return {"mode": "none"}
+    low = q.lower()
+    if len(q) == 2 and q.isalpha() and q.upper() in STATE_CODES:
+        return {"mode": "state", "state": q.upper()}
+    if low in US_STATES:
+        return {"mode": "state", "state": US_STATES[low]}
+    point = locate_area(db, q)
+    if point is not None:
+        return {"mode": "point", "lat": point[0], "lng": point[1]}
+    if low in CATEGORY_KEYWORDS:
+        return {"mode": "category", "category": CATEGORY_KEYWORDS[low]}
+    return {"mode": "text", "q": q}

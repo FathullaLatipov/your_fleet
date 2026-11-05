@@ -25,7 +25,7 @@ export default function ForShopsPage() {
     try {
       setResults(await api<SearchResponse>("/api/search", { params: { q: q.trim(), limit: 8 } }));
     } catch {
-      setResults({ total: 0, items: [], resolved_location: null });
+      setResults({ total: 0, items: [], resolved_location: null, resolved_query: null });
     } finally {
       setBusy(false);
     }

@@ -34,7 +34,9 @@ from app.schemas import (
     ServiceOut,
 )
 from app.security import get_current_user
-from app.services.geo import SearchFilters, locate_area, search_businesses, search_map_points
+from app.services.geo import (
+    SearchFilters, resolve_query, search_businesses, search_map_points,
+)
 
 router = APIRouter(prefix="/api", tags=["businesses"])
 
@@ -134,11 +136,22 @@ def search(
     offset: int = Query(default=0, ge=0),
 ):
     resolved_from_location = None
+    resolved_query = None
     if (lat is None or lng is None) and location:
-        point = locate_area(db, location)
-        if point:
-            lat, lng = point
+        res = resolve_query(db, location)
+        if res["mode"] == "point":
+            lat, lng = res["lat"], res["lng"]
             resolved_from_location = {"lat": lat, "lng": lng}
+            resolved_query = {"mode": "area", "label": location.strip()}
+        elif res["mode"] == "state":
+            state = state or res["state"]
+            resolved_query = {"mode": "state", "label": res["state"]}
+        elif res["mode"] == "category":
+            category = category or res["category"]
+            resolved_query = {"mode": "category", "label": res["category"]}
+        elif res["mode"] == "text":
+            q = q or res["q"]
+            resolved_query = {"mode": "text", "label": res["q"]}
     filters = SearchFilters(
         lat=lat, lng=lng, radius_miles=radius_miles, q=q, category=category,
         service_slug=service,
@@ -152,6 +165,7 @@ def search(
         "total": total,
         "items": [BusinessListItem(**r) for r in rows],
         "resolved_location": resolved_from_location,
+        "resolved_query": resolved_query,
     }
 
 
@@ -178,9 +192,15 @@ def search_map(
     """Every match for the map layer (capped at 3000), minimal fields —
     the paginated list and the map stay in sync filter-wise."""
     if (lat is None or lng is None) and location:
-        point = locate_area(db, location)
-        if point:
-            lat, lng = point
+        res = resolve_query(db, location)
+        if res["mode"] == "point":
+            lat, lng = res["lat"], res["lng"]
+        elif res["mode"] == "state":
+            state = state or res["state"]
+        elif res["mode"] == "category":
+            category = category or res["category"]
+        elif res["mode"] == "text":
+            q = q or res["q"]
     filters = SearchFilters(
         lat=lat, lng=lng, radius_miles=radius_miles, q=q, category=category,
         service_slug=service, state=state, partner_only=partner_only,

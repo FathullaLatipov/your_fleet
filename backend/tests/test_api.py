@@ -324,3 +324,55 @@ class TestClaims:
         r = client.post("/api/claims", headers=h, json={
             "business_id": str(b.id), "evidence": "Actually mine, trust me bro."})
         assert r.status_code == 409
+
+
+class TestUniversalSearch:
+    """One search box: city, 'City ST', state, ZIP, shop name, service term."""
+
+    def test_city_without_comma_or_state(self, client, db):
+        make_business(db, "Orlando Truck Fix", lat=28.5, lng=-81.4,
+                      city="Orlando", state="FL")
+        make_business(db, "Far Away Diesel", lat=47.6, lng=-122.3,
+                      city="Seattle", state="WA")
+        r = client.get("/api/search", params={"location": "Orlando"}).json()
+        assert r["resolved_query"]["mode"] == "area"
+        names = [i["name"] for i in r["items"]]
+        assert "Orlando Truck Fix" in names and "Far Away Diesel" not in names
+        r2 = client.get("/api/search", params={"location": "Orlando FL"}).json()
+        assert r2["resolved_query"]["mode"] == "area"
+
+    def test_state_name_and_code(self, client, db):
+        make_business(db, "Sunshine Repair", lat=28.5, lng=-81.4,
+                      city="Orlando", state="FL")
+        make_business(db, "Lone Star Repair", lat=32.7, lng=-96.8,
+                      city="Dallas", state="TX")
+        for query in ("Florida", "FL"):
+            r = client.get("/api/search", params={"location": query}).json()
+            assert r["resolved_query"] == {"mode": "state", "label": "FL"}
+            names = [i["name"] for i in r["items"]]
+            assert "Sunshine Repair" in names and "Lone Star Repair" not in names
+
+    def test_shop_name_fallback(self, client, db):
+        make_business(db, "Santos Tires Unique", city="Orlando", state="FL")
+        make_business(db, "Unrelated Towing", city="Dallas", state="TX")
+        r = client.get("/api/search", params={"location": "Santos Tires Unique"}).json()
+        assert r["resolved_query"]["mode"] == "text"
+        assert r["total"] == 1
+        assert r["items"][0]["name"] == "Santos Tires Unique"
+
+    def test_category_keyword(self, client, db):
+        from app.models import BusinessCategory
+        tire = make_business(db, "Keyword Tire Place")
+        tow = make_business(db, "Keyword Tow Place")
+        tire.category = BusinessCategory.TIRE
+        tow.category = BusinessCategory.TOWING
+        db.commit()
+        r = client.get("/api/search", params={"location": "towing"}).json()
+        assert r["resolved_query"] == {"mode": "category", "label": "towing"}
+        names = [i["name"] for i in r["items"]]
+        assert "Keyword Tow Place" in names and "Keyword Tire Place" not in names
+
+    def test_google_type_text_match(self, client, db):
+        make_business(db, "Typed Shop", google_primary_type="Trailer repair shop")
+        r = client.get("/api/search", params={"location": "Trailer repair shop"}).json()
+        assert any(i["name"] == "Typed Shop" for i in r["items"])

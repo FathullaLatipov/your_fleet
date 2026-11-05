@@ -178,6 +178,8 @@ export interface SearchResponse {
   total: number;
   items: BusinessListItem[];
   resolved_location: { lat: number; lng: number } | null;
+  /* How the free-text search box was interpreted by the server. */
+  resolved_query: { mode: "area" | "state" | "category" | "text"; label: string } | null;
 }
 
 export const fmtUsd = (cents: number | null | undefined): string =>
