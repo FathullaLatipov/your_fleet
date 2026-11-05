@@ -1,12 +1,14 @@
-"""Transactional email via Resend (https://resend.com).
+"""Transactional email: SMTP (e.g. Gmail with an app password) or Resend.
 
+SMTP wins when both are configured — it's the small-install path.
 Best-effort by design: a failed or unconfigured email never breaks the flow
 that triggered it — in-app notifications remain the source of truth.
-Without RESEND_API_KEY nothing is sent.
 """
 from __future__ import annotations
 
 import logging
+import smtplib
+from email.mime.text import MIMEText
 
 import httpx
 
@@ -17,11 +19,29 @@ log = logging.getLogger(__name__)
 API = "https://api.resend.com/emails"
 
 
+def smtp_configured() -> bool:
+    s = get_settings()
+    return bool(s.smtp_user and s.smtp_password)
+
+
 def is_configured() -> bool:
-    return bool(get_settings().resend_api_key)
+    return smtp_configured() or bool(get_settings().resend_api_key)
 
 
-def _deliver(to: str, subject: str, html: str) -> bool:
+def _deliver_smtp(to: str, subject: str, html: str) -> bool:
+    s = get_settings()
+    msg = MIMEText(html, "html", "utf-8")
+    msg["Subject"] = subject
+    msg["From"] = f"YourFleet <{s.smtp_user}>"
+    msg["To"] = to
+    with smtplib.SMTP(s.smtp_host, s.smtp_port, timeout=20) as conn:
+        conn.starttls()
+        conn.login(s.smtp_user, s.smtp_password)
+        conn.sendmail(s.smtp_user, [to], msg.as_string())
+    return True
+
+
+def _deliver_resend(to: str, subject: str, html: str) -> bool:
     settings = get_settings()
     resp = httpx.post(
         API,
@@ -37,7 +57,9 @@ def send(to: str, subject: str, html: str) -> bool:
     if not is_configured() or not to:
         return False
     try:
-        return _deliver(to, subject, html)
+        if smtp_configured():
+            return _deliver_smtp(to, subject, html)
+        return _deliver_resend(to, subject, html)
     except Exception as e:  # noqa: BLE001 — email must never break the caller
         log.warning("email to %s failed: %s", to, e)
         return False

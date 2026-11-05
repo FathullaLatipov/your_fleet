@@ -15,6 +15,12 @@ class Settings(BaseSettings):
     google_places_api_key: str = ""
     resend_api_key: str = ""
     email_from: str = "YourFleet <onboarding@resend.dev>"
+    # SMTP sender (e.g. a Gmail address with an app password) — used instead
+    # of Resend when configured. Fine for small installs.
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
     frontend_url: str = "https://your-fleet.vercel.app"
 
     @property

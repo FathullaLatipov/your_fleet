@@ -87,3 +87,47 @@ class TestEmailVerification:
         enable_email(monkeypatch)
         assert client.post("/api/auth/login", json={
             "email": "legacy@example.com", "password": "password123"}).status_code == 200
+
+
+class _FakeSMTP:
+    """Records the SMTP conversation instead of talking to Gmail."""
+    sent = {}
+
+    def __init__(self, host, port, timeout=0):
+        _FakeSMTP.sent["host"] = (host, port)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def starttls(self):
+        _FakeSMTP.sent["tls"] = True
+
+    def login(self, user, password):
+        _FakeSMTP.sent["login"] = (user, password)
+
+    def sendmail(self, frm, to, body):
+        _FakeSMTP.sent["mail"] = (frm, to, body)
+
+
+class TestSmtpDelivery:
+    def test_send_uses_smtp_when_configured(self, monkeypatch):
+        from app.config import Settings
+        from app.services import email as email_mod
+
+        cfg = Settings(smtp_user="wolffleet1@gmail.com", smtp_password="app-pass",
+                       resend_api_key="")
+        monkeypatch.setattr(email_mod, "get_settings", lambda: cfg)
+        monkeypatch.setattr(email_mod.smtplib, "SMTP", _FakeSMTP)
+        _FakeSMTP.sent = {}
+        assert email_mod.is_configured() is True
+        ok = email_mod.send("driver@example.com", "123456 is your code", "<p>hi</p>")
+        assert ok is True
+        assert _FakeSMTP.sent["host"] == ("smtp.gmail.com", 587)
+        assert _FakeSMTP.sent["tls"] is True
+        assert _FakeSMTP.sent["login"] == ("wolffleet1@gmail.com", "app-pass")
+        frm, to, body = _FakeSMTP.sent["mail"]
+        assert frm == "wolffleet1@gmail.com" and to == ["driver@example.com"]
+        assert "123456" in body
