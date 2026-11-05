@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 
 /* Same shell routes as Header: the sidebar layout owns those pages end to end. */
 const SHELL_ROUTES =
-  /^\/(dashboard|fleet|repairs|bookings|trailers|drivers|issues|tasks|deadlines|comm-log|service-records|expenses|analytics|work-orders)/;
+  /^\/(dashboard|fleet|repairs|bookings|trailers|drivers|issues|tasks|deadlines|comm-log|service-records|expenses|analytics|work-orders|loans)/;
 
 export function Footer() {
   const pathname = usePathname();

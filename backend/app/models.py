@@ -381,11 +381,42 @@ class Trailer(Base):
     assigned_vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"))
     inspection_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     registration_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ownership: Mapped[str | None] = mapped_column(String(16))      # owned | leased
+    lease_cents_monthly: Mapped[int | None] = mapped_column(Integer)
+    tires_condition: Mapped[str | None] = mapped_column(String(32))  # good | fair | replace_soon
     notes: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
     __table_args__ = (
         UniqueConstraint("owner_user_id", "unit_number", name="uq_trailer_unit"),
+    )
+
+
+class VehicleLoan(Base):
+    """Financing on a truck. The amortization schedule is derived, never
+    stored: payment i is due i months after start_date, and a payment is
+    'paid' when its due date has passed (until bank matching exists)."""
+
+    __tablename__ = "vehicle_loans"
+
+    id: Mapped[uuid.UUID] = pk()
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("vehicles.id"), unique=True, index=True
+    )
+    lender: Mapped[str] = mapped_column(String(128))
+    purchase_price_cents: Mapped[int | None] = mapped_column(Integer)
+    down_payment_cents: Mapped[int | None] = mapped_column(Integer)
+    principal_cents: Mapped[int] = mapped_column(Integer)  # financed amount
+    apr: Mapped[float] = mapped_column(Float)              # e.g. 8.9 (%)
+    term_months: Mapped[int] = mapped_column(Integer)
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (
+        CheckConstraint("principal_cents > 0", name="ck_loan_principal"),
+        CheckConstraint("apr >= 0 AND apr <= 100", name="ck_loan_apr"),
+        CheckConstraint("term_months >= 1 AND term_months <= 600", name="ck_loan_term"),
     )
 
 

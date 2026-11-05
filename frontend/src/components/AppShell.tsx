@@ -113,6 +113,9 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M9 4.5V3h6v1.5M8.5 10h7M8.5 13.5h7M8.5 17h4.5" />
     </>
   ),
+  bank: (
+    <path d="M3 21h18M5 21V10M19 21V10M9 21V10M15 21V10M2 10l10-7 10 7H2Z" strokeLinejoin="round" />
+  ),
 };
 
 function NavIcon({ name, className = "h-4.5 w-4.5 shrink-0" }: { name: string; className?: string }) {
@@ -230,6 +233,7 @@ export function AppShell({ title, children }: { title: string; children: React.R
       items: [
         { href: "/service-records", label: "Service records", icon: "records" },
         { href: "/expenses", label: "Expenses", icon: "dollar" },
+        { href: "/loans", label: "Loans", icon: "bank" },
       ],
     },
     { label: "Insights", items: [{ href: "/analytics", label: "Analytics", icon: "chart" }] },

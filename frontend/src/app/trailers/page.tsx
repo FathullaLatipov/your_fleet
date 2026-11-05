@@ -21,9 +21,16 @@ interface Trailer {
   assigned_unit: string | null;
   inspection_expires_at: string | null;
   registration_expires_at: string | null;
+  ownership: "owned" | "leased" | null;
+  lease_cents_monthly: number | null;
+  tires_condition: "good" | "fair" | "replace_soon" | null;
   notes: string | null;
   warnings: string[];
 }
+
+const TIRES_LABEL: Record<string, string> = {
+  good: "Tires: good", fair: "Tires: fair", replace_soon: "Tires: replace soon",
+};
 
 interface VehicleOpt {
   id: string;
@@ -59,12 +66,15 @@ interface TrailerForm {
   notes: string;
   status: string;
   assigned_vehicle_id: string;
+  ownership: string;
+  lease: string;        // monthly lease in dollars
+  tires: string;
 }
 
 const emptyForm: TrailerForm = {
   unit_number: "", trailer_type: "dry_van", year: "", vin: "", license_plate: "",
   state: "", inspection: "", registration: "", notes: "", status: "active",
-  assigned_vehicle_id: "",
+  assigned_vehicle_id: "", ownership: "owned", lease: "", tires: "",
 };
 
 function FormFields({
@@ -119,6 +129,31 @@ function FormFields({
         <label className="text-sm font-medium text-steel" htmlFor={`${idPrefix}-reg`}>Registration expires</label>
         <input id={`${idPrefix}-reg`} type="date" className="field mt-1" value={f.registration}
                onChange={(e) => setF({ ...f, registration: e.target.value })} />
+      </div>
+      <div>
+        <label className="text-sm font-medium text-steel" htmlFor={`${idPrefix}-own`}>Ownership</label>
+        <select id={`${idPrefix}-own`} className="field mt-1" value={f.ownership}
+                onChange={(e) => setF({ ...f, ownership: e.target.value })}>
+          <option value="owned">Owned</option>
+          <option value="leased">Leased</option>
+        </select>
+      </div>
+      {f.ownership === "leased" && (
+        <div>
+          <label className="text-sm font-medium text-steel" htmlFor={`${idPrefix}-lease`}>Lease, $/month</label>
+          <input id={`${idPrefix}-lease`} className="field mt-1" inputMode="decimal" placeholder="1150"
+                 value={f.lease} onChange={(e) => setF({ ...f, lease: e.target.value })} />
+        </div>
+      )}
+      <div>
+        <label className="text-sm font-medium text-steel" htmlFor={`${idPrefix}-tires`}>Tires</label>
+        <select id={`${idPrefix}-tires`} className="field mt-1" value={f.tires}
+                onChange={(e) => setF({ ...f, tires: e.target.value })}>
+          <option value="">Not tracked</option>
+          <option value="good">Good</option>
+          <option value="fair">Fair</option>
+          <option value="replace_soon">Replace soon</option>
+        </select>
       </div>
       {withStatus && (
         <>
@@ -175,6 +210,9 @@ function TrailerRow({
       notes: t.notes ?? "",
       status: t.status,
       assigned_vehicle_id: t.assigned_vehicle_id ?? "",
+      ownership: t.ownership ?? "owned",
+      lease: t.lease_cents_monthly != null ? String(t.lease_cents_monthly / 100) : "",
+      tires: t.tires_condition ?? "",
     });
     setEdit(true);
   }
@@ -197,6 +235,10 @@ function TrailerRow({
           notes: f.notes || null,
           status: f.status,
           assigned_vehicle_id: f.assigned_vehicle_id || null,
+          ownership: f.ownership || null,
+          lease_cents_monthly:
+            f.ownership === "leased" && f.lease ? Math.round(Number(f.lease) * 100) : null,
+          tires_condition: f.tires || null,
         },
       });
       setEdit(false);
@@ -233,6 +275,18 @@ function TrailerRow({
           <p className="mt-0.5 text-sm text-steel">{idLine || "—"}</p>
         </div>
         <span className={`rounded px-2 py-0.5 text-xs font-semibold ${sCls}`}>{sLabel}</span>
+        {t.ownership === "leased" && (
+          <span className="rounded bg-mist px-2 py-0.5 text-xs font-semibold text-steel">
+            Leased{t.lease_cents_monthly != null && ` · $${Math.round(t.lease_cents_monthly / 100).toLocaleString()}/mo`}
+          </span>
+        )}
+        {t.tires_condition && (
+          <span className={`rounded px-2 py-0.5 text-xs font-semibold ${
+            t.tires_condition === "replace_soon" ? "bg-amber-wash text-amber-ink" : "bg-mist text-steel"
+          }`}>
+            {TIRES_LABEL[t.tires_condition]}
+          </span>
+        )}
         <span className="text-sm text-steel">
           {t.assigned_unit ? <>Hooked to <strong className="text-ink">#{t.assigned_unit}</strong></> : "Unassigned"}
         </span>
@@ -305,6 +359,10 @@ function TrailersInner() {
           state: form.state || null,
           inspection_expires_at: form.inspection ? new Date(form.inspection).toISOString() : null,
           registration_expires_at: form.registration ? new Date(form.registration).toISOString() : null,
+          ownership: form.ownership || null,
+          lease_cents_monthly:
+            form.ownership === "leased" && form.lease ? Math.round(Number(form.lease) * 100) : null,
+          tires_condition: form.tires || null,
           notes: form.notes || null,
         },
       });

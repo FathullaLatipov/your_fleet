@@ -34,6 +34,21 @@ interface VehicleOpt {
   unit_number: string;
 }
 
+/* Contract for /api/fleet/finance/monthly. */
+interface MonthlyCosts {
+  months: {
+    month: string;
+    repairs_cents: number;
+    loans_cents: number;
+    leases_cents: number;
+    total_cents: number;
+  }[];
+  loan_monthly_cents: number;
+  lease_monthly_cents: number;
+  financed_trucks: number;
+  leased_trailers: number;
+}
+
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 function monthLabel(ym: string): string {
@@ -130,6 +145,7 @@ function ExpensesInner() {
   const [form, setForm] = useState({
     vehicle_id: "", category: "repair", description: "", amount: "", odometer: "", date: "",
   });
+  const [monthlyCosts, setMonthlyCosts] = useState<MonthlyCosts | null>(null);
 
   const load = useCallback(() => {
     setError(null);
@@ -151,6 +167,7 @@ function ExpensesInner() {
   useEffect(() => {
     if (!user) return;
     api<VehicleOpt[]>("/api/fleet/vehicles").then(setVehicles).catch(() => {});
+    api<MonthlyCosts>("/api/fleet/finance/monthly").then(setMonthlyCosts).catch(() => {});
   }, [user]);
 
   async function addExpense(e: React.FormEvent) {
@@ -273,6 +290,53 @@ function ExpensesInner() {
               )}
             </section>
           </div>
+
+          {/* Monthly fleet cost: repairs + loans + leases */}
+          {monthlyCosts && (monthlyCosts.financed_trucks > 0 || monthlyCosts.leased_trailers > 0) && (
+            <section className="card mt-5 p-5">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h3 className="text-lg font-bold">Monthly fleet cost</h3>
+                <p className="text-sm text-steel">
+                  {monthlyCosts.financed_trucks} financed truck{monthlyCosts.financed_trucks === 1 ? "" : "s"} ·{" "}
+                  {monthlyCosts.leased_trailers} leased trailer{monthlyCosts.leased_trailers === 1 ? "" : "s"} ·{" "}
+                  <Link href="/loans" className="font-semibold text-pine hover:underline">manage loans</Link>
+                </p>
+              </div>
+              <div className="mt-4 overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left text-steel">
+                      <th className="py-2 pr-3 font-medium">Month</th>
+                      <th className="py-2 pr-3 text-right font-medium">Repairs</th>
+                      <th className="py-2 pr-3 text-right font-medium">Truck loans</th>
+                      <th className="py-2 pr-3 text-right font-medium">Trailer leases</th>
+                      <th className="py-2 text-right font-medium">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {monthlyCosts.months.map((m, i) => (
+                      <tr key={m.month} className="border-b border-line/60">
+                        <td className="py-2.5 pr-3">
+                          {monthLabel(m.month)} {m.month.slice(0, 4)}
+                          {i === monthlyCosts.months.length - 1 && (
+                            <span className="ml-1 text-xs text-faint">(so far)</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{fmtUsd(m.repairs_cents)}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{fmtUsd(m.loans_cents)}</td>
+                        <td className="py-2.5 pr-3 text-right tabular-nums">{fmtUsd(m.leases_cents)}</td>
+                        <td className="py-2.5 text-right font-bold tabular-nums">{fmtUsd(m.total_cents)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <p className="mt-3 text-xs text-faint">
+                Loan and lease columns are the current monthly commitments applied to each month shown —
+                payment history isn&apos;t tracked yet.
+              </p>
+            </section>
+          )}
 
           {/* Ledger */}
           <section className="card mt-5 p-5">

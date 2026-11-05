@@ -70,6 +70,9 @@ class TrailerIn(BaseModel):
     state: str | None = Field(default=None, max_length=32)
     inspection_expires_at: datetime | None = None
     registration_expires_at: datetime | None = None
+    ownership: str | None = Field(default=None, pattern="^(owned|leased)$")
+    lease_cents_monthly: int | None = Field(default=None, ge=0)
+    tires_condition: str | None = Field(default=None, pattern="^(good|fair|replace_soon)$")
     notes: str | None = None
 
     @field_validator("vin")
@@ -89,6 +92,9 @@ class TrailerUpdateIn(BaseModel):
     assigned_vehicle_id: uuid.UUID | None = None
     inspection_expires_at: datetime | None = None
     registration_expires_at: datetime | None = None
+    ownership: str | None = Field(default=None, pattern="^(owned|leased)$")
+    lease_cents_monthly: int | None = Field(default=None, ge=0)
+    tires_condition: str | None = Field(default=None, pattern="^(good|fair|replace_soon)$")
     notes: str | None = None
 
     @field_validator("vin")
@@ -116,6 +122,9 @@ def _trailer_out(t: Trailer, units: dict[uuid.UUID, str]) -> dict:
         "assigned_unit": units.get(t.assigned_vehicle_id) if t.assigned_vehicle_id else None,
         "inspection_expires_at": _iso(t.inspection_expires_at),
         "registration_expires_at": _iso(t.registration_expires_at),
+        "ownership": t.ownership,
+        "lease_cents_monthly": t.lease_cents_monthly,
+        "tires_condition": t.tires_condition,
         "notes": t.notes,
         "warnings": trailer_warnings(t),
     }
