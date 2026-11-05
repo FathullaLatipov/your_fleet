@@ -376,3 +376,27 @@ class TestUniversalSearch:
         make_business(db, "Typed Shop", google_primary_type="Trailer repair shop")
         r = client.get("/api/search", params={"location": "Trailer repair shop"}).json()
         assert any(i["name"] == "Typed Shop" for i in r["items"])
+
+
+class TestCarrierIdentity:
+    def test_register_with_carrier_and_update(self, client, db):
+        r = client.post("/api/auth/register", json={
+            "email": "carrier-reg@example.com", "password": "secret123",
+            "full_name": "Fathullaxon Latipov", "role": "fleet_manager",
+            "carrier_name": "VKL TRUCKING INC", "mc_number": "123456",
+            "dot_number": "7654321",
+        })
+        assert r.status_code == 201
+        body = r.json()
+        assert body["carrier_name"] == "VKL TRUCKING INC"
+        assert body["mc_number"] == "123456" and body["dot_number"] == "7654321"
+        h = login(client, "carrier-reg@example.com", "secret123")
+        me = client.get("/api/auth/me", headers=h).json()
+        assert me["carrier_name"] == "VKL TRUCKING INC"
+        # Profile update changes only what's sent; blanks clear a field
+        r = client.patch("/api/me/profile", headers=h,
+                         json={"mc_number": "999000", "dot_number": ""})
+        updated = r.json()
+        assert updated["mc_number"] == "999000"
+        assert updated["dot_number"] is None
+        assert updated["carrier_name"] == "VKL TRUCKING INC"

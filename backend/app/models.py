@@ -69,6 +69,11 @@ class User(Base):
     password_hash: Mapped[str] = mapped_column(String(255))
     full_name: Mapped[str] = mapped_column(String(255))
     phone: Mapped[str | None] = mapped_column(String(32))
+    # Carrier identity (fleet managers): shown in the console and used as the
+    # default MC/carrier line on new trucks.
+    carrier_name: Mapped[str | None] = mapped_column(String(255))
+    mc_number: Mapped[str | None] = mapped_column(String(32))
+    dot_number: Mapped[str | None] = mapped_column(String(32))
     role: Mapped[UserRole] = mapped_column(str_enum(UserRole), default=UserRole.DRIVER)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

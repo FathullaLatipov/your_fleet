@@ -13,6 +13,9 @@ function RegisterInner() {
   const { refresh } = useAuth();
   const [role, setRole] = useState(params.get("role") === "provider" ? "provider" : "driver");
   const [fullName, setFullName] = useState("");
+  const [carrierName, setCarrierName] = useState("");
+  const [mcNumber, setMcNumber] = useState("");
+  const [dotNumber, setDotNumber] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +29,12 @@ function RegisterInner() {
     try {
       await api("/api/auth/register", {
         method: "POST",
-        body: { email, password, full_name: fullName, phone: phone || null, role },
+        body: {
+          email, password, full_name: fullName, phone: phone || null, role,
+          carrier_name: role === "fleet_manager" ? carrierName.trim() || null : null,
+          mc_number: role === "fleet_manager" ? mcNumber.trim() || null : null,
+          dot_number: role === "fleet_manager" ? dotNumber.trim() || null : null,
+        },
       });
       const res = await api<{ access_token: string }>("/api/auth/login", {
         method: "POST",
@@ -56,9 +64,31 @@ function RegisterInner() {
             ))}
           </div>
         </fieldset>
+        {role === "fleet_manager" && (
+          <>
+            <div>
+              <label className="text-sm font-medium text-steel" htmlFor="carrier">Carrier name</label>
+              <input id="carrier" required className="field mt-1" placeholder="VKL TRUCKING INC"
+                     value={carrierName} onChange={(e) => setCarrierName(e.target.value)}
+                     autoComplete="organization" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-sm font-medium text-steel" htmlFor="mc">MC # (optional)</label>
+                <input id="mc" className="field mt-1" inputMode="numeric" placeholder="123456"
+                       value={mcNumber} onChange={(e) => setMcNumber(e.target.value)} />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-steel" htmlFor="dot">DOT # (optional)</label>
+                <input id="dot" className="field mt-1" inputMode="numeric" placeholder="7654321"
+                       value={dotNumber} onChange={(e) => setDotNumber(e.target.value)} />
+              </div>
+            </div>
+          </>
+        )}
         <div>
           <label className="text-sm font-medium text-steel" htmlFor="name">
-            {role === "provider" ? "Contact name" : "Full name"}
+            {role === "provider" ? "Contact name" : role === "fleet_manager" ? "Your full name" : "Full name"}
           </label>
           <input id="name" required className="field mt-1" value={fullName}
                  onChange={(e) => setFullName(e.target.value)} autoComplete="name" />

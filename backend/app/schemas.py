@@ -42,6 +42,9 @@ class RegisterIn(BaseModel):
     password: str = Field(min_length=8, max_length=128)
     full_name: str = Field(min_length=1, max_length=255)
     phone: str | None = Field(default=None, max_length=32)
+    carrier_name: str | None = Field(default=None, max_length=255)
+    mc_number: str | None = Field(default=None, max_length=32)
+    dot_number: str | None = Field(default=None, max_length=32)
     role: UserRole = UserRole.DRIVER
 
     @field_validator("role")
@@ -67,6 +70,9 @@ class UserOut(ORMModel):
     email: EmailStr
     full_name: str
     phone: str | None
+    carrier_name: str | None
+    mc_number: str | None
+    dot_number: str | None
     role: UserRole
     created_at: datetime
 

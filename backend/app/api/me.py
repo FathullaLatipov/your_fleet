@@ -3,15 +3,38 @@ and the businesses they manage."""
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Business, FavoriteShop, Notification, User, utcnow
-from app.schemas import BusinessListItem, NotificationOut
+from app.schemas import BusinessListItem, NotificationOut, UserOut
 from app.security import get_current_user
 
 router = APIRouter(prefix="/api/me", tags=["me"])
+
+
+class ProfileUpdateIn(BaseModel):
+    full_name: str | None = Field(default=None, min_length=1, max_length=255)
+    phone: str | None = Field(default=None, max_length=32)
+    carrier_name: str | None = Field(default=None, max_length=255)
+    mc_number: str | None = Field(default=None, max_length=32)
+    dot_number: str | None = Field(default=None, max_length=32)
+
+
+@router.patch("/profile", response_model=UserOut)
+def update_profile(body: ProfileUpdateIn, user: User = Depends(get_current_user),
+                   db: Session = Depends(get_db)):
+    data = body.model_dump(exclude_unset=True)
+    if "full_name" in data and data["full_name"]:
+        user.full_name = data["full_name"].strip()
+    for field in ("phone", "carrier_name", "mc_number", "dot_number"):
+        if field in data:
+            value = (data[field] or "").strip()
+            setattr(user, field, value or None)
+    db.commit()
+    return user
 
 
 @router.get("/notifications", response_model=list[NotificationOut])

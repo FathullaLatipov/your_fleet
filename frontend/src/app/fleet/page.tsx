@@ -7,7 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { fmtUsd, type Vehicle } from "@/lib/types";
+import { carrierLine, fmtUsd, type Vehicle } from "@/lib/types";
 
 const MAINT_BADGE: Record<string, [string, string]> = {
   ok: ["Maintenance OK", "bg-pine-wash text-pine"],
@@ -40,6 +40,12 @@ function FleetInner() {
   useEffect(() => {
     if (user) load();
   }, [user, load]);
+
+  // New trucks default to the carrier line from the owner's profile.
+  useEffect(() => {
+    const def = user ? carrierLine(user) ?? "" : "";
+    if (def) setForm((f) => (f.mc === "" ? { ...f, mc: def } : f));
+  }, [user]);
 
   if (loading) return <Loader />;
   if (!user || (user.role !== "driver" && user.role !== "fleet_manager")) {
@@ -76,7 +82,8 @@ function FleetInner() {
         },
       });
       setForm({ unit_number: "", make: "", model: "", year: "", vin: "", odometer: "",
-                plate: "", state: "", driver: "", ownership: "", mc: "" });
+                plate: "", state: "", driver: "", ownership: "",
+                mc: user ? carrierLine(user) ?? "" : "" });
       setShowAdd(false);
       load();
     } catch (err) {

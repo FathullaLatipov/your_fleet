@@ -5,7 +5,20 @@ export interface User {
   email: string;
   full_name: string;
   phone: string | null;
+  carrier_name: string | null;
+  mc_number: string | null;
+  dot_number: string | null;
   role: Role;
+}
+
+/* "VKL TRUCKING INC · MC 123456 · DOT 7654321" — or null when nothing is set. */
+export function carrierLine(u: Pick<User, "carrier_name" | "mc_number" | "dot_number">): string | null {
+  const parts = [
+    u.carrier_name,
+    u.mc_number ? `MC ${u.mc_number}` : null,
+    u.dot_number ? `DOT ${u.dot_number}` : null,
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
 }
 
 export interface BusinessListItem {

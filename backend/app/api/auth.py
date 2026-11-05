@@ -22,6 +22,9 @@ def register(body: RegisterIn, request: Request, db: Session = Depends(get_db)):
         password_hash=hash_password(body.password),
         full_name=body.full_name,
         phone=body.phone,
+        carrier_name=(body.carrier_name or "").strip() or None,
+        mc_number=(body.mc_number or "").strip() or None,
+        dot_number=(body.dot_number or "").strip() or None,
         role=body.role,
     )
     db.add(user)
