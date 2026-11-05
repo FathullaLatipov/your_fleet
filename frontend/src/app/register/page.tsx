@@ -14,7 +14,6 @@ function RegisterInner() {
   const [role, setRole] = useState(params.get("role") === "provider" ? "provider" : "driver");
   const [fullName, setFullName] = useState("");
   const [carrierName, setCarrierName] = useState("");
-  const [mcNumber, setMcNumber] = useState("");
   const [dotNumber, setDotNumber] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -32,7 +31,6 @@ function RegisterInner() {
         body: {
           email, password, full_name: fullName, phone: phone || null, role,
           carrier_name: role === "fleet_manager" ? carrierName.trim() || null : null,
-          mc_number: role === "fleet_manager" ? mcNumber.trim() || null : null,
           dot_number: role === "fleet_manager" ? dotNumber.trim() || null : null,
         },
       });
@@ -72,17 +70,10 @@ function RegisterInner() {
                      value={carrierName} onChange={(e) => setCarrierName(e.target.value)}
                      autoComplete="organization" />
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-sm font-medium text-steel" htmlFor="mc">MC # (optional)</label>
-                <input id="mc" className="field mt-1" inputMode="numeric" placeholder="123456"
-                       value={mcNumber} onChange={(e) => setMcNumber(e.target.value)} />
-              </div>
-              <div>
-                <label className="text-sm font-medium text-steel" htmlFor="dot">DOT # (optional)</label>
-                <input id="dot" className="field mt-1" inputMode="numeric" placeholder="7654321"
-                       value={dotNumber} onChange={(e) => setDotNumber(e.target.value)} />
-              </div>
+            <div>
+              <label className="text-sm font-medium text-steel" htmlFor="dot">DOT # (optional)</label>
+              <input id="dot" className="field mt-1" inputMode="numeric" placeholder="7654321"
+                     value={dotNumber} onChange={(e) => setDotNumber(e.target.value)} />
             </div>
           </>
         )}
