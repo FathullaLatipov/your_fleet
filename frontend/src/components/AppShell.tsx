@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { Loader } from "@/components/Loader";
 import { useAuth } from "@/lib/auth";
@@ -163,12 +164,19 @@ interface NavItem {
   label: string;
   icon: string;
   soon?: boolean;
+  children?: NavItem[];
 }
 
 function isActive(href: string, pathname: string): boolean {
   if (href === "/dashboard") return pathname === "/dashboard";
   if (href === "/fleet") return pathname.startsWith("/fleet");
   if (href === "/repairs") return pathname.startsWith("/repairs") || pathname.startsWith("/bookings");
+  if (href === "/work-orders") {
+    // Manual console: everything under /work-orders except the channel pages.
+    return pathname.startsWith("/work-orders")
+      && !pathname.startsWith("/work-orders/mobile")
+      && !pathname.startsWith("/work-orders/telegram");
+  }
   return pathname === href;
 }
 
@@ -189,6 +197,50 @@ function SideLink({ item, pathname }: { item: NavItem; pathname: string }) {
         </span>
       )}
     </Link>
+  );
+}
+
+function NavDropdown({ item, pathname }: { item: NavItem; pathname: string }) {
+  const anyActive = pathname.startsWith(item.href);
+  const [open, setOpen] = useState(anyActive);
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        className={`flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+          anyActive ? "bg-white/10 text-white" : "text-white/60 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <NavIcon name={item.icon} />
+        {item.label}
+        <svg viewBox="0 0 24 24" className={`ml-auto h-3.5 w-3.5 transition-transform ${open ? "rotate-90" : ""}`}
+             fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden>
+          <path d="m9 6 6 6-6 6" />
+        </svg>
+      </button>
+      {open && (
+        <div className="mt-0.5 space-y-0.5 border-l border-white/10 pl-3" style={{ marginLeft: 22 }}>
+          {item.children!.map((c) => {
+            const active = isActive(c.href, pathname);
+            return (
+              <Link key={c.href} href={c.href}
+                    className={`flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition-colors ${
+                      active ? "bg-white/10 text-white" : "text-white/55 hover:bg-white/5 hover:text-white"
+                    }`}>
+                {c.label}
+                {c.soon && (
+                  <span className="ml-auto rounded border border-cta/50 px-1.5 text-[10px] font-bold uppercase tracking-wide text-cta">
+                    Soon
+                  </span>
+                )}
+              </Link>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -254,7 +306,14 @@ export function AppShell({ title, children }: { title: string; children: React.R
         { href: "/fleet", label: "Trucks", icon: "truck" },
         { href: "/trailers", label: "Trailers", icon: "trailer" },
         { href: "/drivers", label: "Drivers", icon: "users" },
-        { href: "/work-orders", label: "Work orders", icon: "clipboard" },
+        {
+          href: "/work-orders", label: "Work orders", icon: "clipboard",
+          children: [
+            { href: "/work-orders/mobile", label: "Mobile app", icon: "clipboard", soon: true },
+            { href: "/work-orders/telegram", label: "Telegram", icon: "clipboard", soon: true },
+            { href: "/work-orders", label: "Manual", icon: "clipboard" },
+          ],
+        },
         { href: "/ai-dispatch", label: "AI Dispatch", icon: "bot", soon: true },
         { href: "/reports", label: "Reports", icon: "report" },
         { href: "/fuel", label: "Fuel", icon: "fuel", soon: true },
@@ -263,7 +322,8 @@ export function AppShell({ title, children }: { title: string; children: React.R
       ],
     },
   ];
-  const allItems = groups.flatMap((g) => g.items);
+  // Mobile pills are flat: a dropdown contributes its children instead.
+  const allItems = groups.flatMap((g) => g.items.flatMap((i) => i.children ?? [i]));
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -284,7 +344,10 @@ export function AppShell({ title, children }: { title: string; children: React.R
             <div key={g.label || gi} className="mb-1.5">
               {g.label && <p className="px-3 pb-1 pt-2 text-xs text-white/40">{g.label}</p>}
               <div className="space-y-0.5">
-                {g.items.map((item) => <SideLink key={item.href} item={item} pathname={pathname} />)}
+                {g.items.map((item) =>
+                  item.children
+                    ? <NavDropdown key={item.href} item={item} pathname={pathname} />
+                    : <SideLink key={item.href} item={item} pathname={pathname} />)}
               </div>
             </div>
           ))}
