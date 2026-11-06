@@ -279,7 +279,7 @@ const TITLE_SERVICE: [string, string][] = [
 function shopLinkFor(title: string): string {
   const t = title.toLowerCase();
   for (const [key, slug] of TITLE_SERVICE) {
-    if (t.includes(key)) return `/search?service=${slug}`;
+    if (t.includes(key)) return `/map?service=${slug}`;
   }
   return "/search";
 }
@@ -824,7 +824,7 @@ function VehicleInner() {
                           {opt.options.length === 0 ? (
                             <p className="text-sm text-steel">
                               No shops with a published price for this service nearby yet — try the
-                              general <Link className="text-pine underline" href="/search">search</Link>.
+                              general <Link className="text-pine underline" href="/map">search</Link>.
                             </p>
                           ) : (
                             <ul className="space-y-1.5">
@@ -973,7 +973,7 @@ function VehicleInner() {
             {d.bookings.length === 0 ? (
               <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-6 text-center text-sm text-steel">
                 No marketplace repairs yet. Open a PTI defect and hit “Find shops & prices”,
-                or <Link href="/search" className="text-pine underline">find a shop</Link> directly.
+                or <Link href="/map" className="text-pine underline">find a shop</Link> directly.
               </p>
             ) : (
               <ul className="mt-4 divide-y divide-line/70">

@@ -139,7 +139,7 @@ function RepairsInner() {
     <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="text-steel">Requests, history, saved shops and notifications — all in one place.</p>
-        <Link href="/search" className="btn !py-2 text-sm">
+        <Link href="/map" className="btn !py-2 text-sm">
           <Icon name="wrench" className="h-4.5 w-4.5" />
           Find truck repair
         </Link>

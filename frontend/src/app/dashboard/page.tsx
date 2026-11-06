@@ -487,7 +487,7 @@ function DashboardInner() {
           {data.active_request_list.length === 0 ? (
             <div className="mt-4">
               <p className="text-sm text-steel">No repair requests in flight.</p>
-              <Link href="/search" className="btn-quiet mt-3 !py-2 text-sm">Find a shop</Link>
+              <Link href="/map" className="btn-quiet mt-3 !py-2 text-sm">Find a shop</Link>
             </div>
           ) : (
             <ul className="-mx-2 mt-3 space-y-0.5">

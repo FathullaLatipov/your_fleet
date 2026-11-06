@@ -306,7 +306,7 @@ function WorkOrderInner() {
                   onClick={() => void act("send", "/send", { call_type: callType, shop_name: assignShop.trim() || null })}>
             {busy === "send" ? "Sending…" : assignShop.trim() ? "Assign Shop" : "Send Request"}
           </button>
-          <Link href={`/search?assign_wo=${wo.id}&wo=${wo.wo_number}${wo.priority === "roadside" ? "&service=towing" : ""}`}
+          <Link href={`/map?assign_wo=${wo.id}&wo=${wo.wo_number}${wo.priority === "roadside" ? "&service=towing" : ""}`}
                 className="btn-quiet !py-2 text-sm">
             Select Preferred Shop on the map
           </Link>
@@ -322,7 +322,7 @@ function WorkOrderInner() {
           {wo.shop_name ? <> · assigned to <span className="font-semibold text-ink">{wo.shop_name}</span></> : " · collecting quotes"}
           . Record each quote as shops come back to you.
         </p>
-        <Link href={`/search?assign_wo=${wo.id}&wo=${wo.wo_number}`}
+        <Link href={`/map?assign_wo=${wo.id}&wo=${wo.wo_number}`}
               className="btn-quiet mt-3 inline-block !py-2 text-sm">
           {wo.shop_name ? "Change shop on the map" : "Pick a shop on the map"}
         </Link>
