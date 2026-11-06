@@ -7,7 +7,8 @@ from tests.test_api import client, login, make_business, make_user  # noqa: F401
 def capture_emails(monkeypatch):
     sent: list[tuple[str, str, str]] = []
     monkeypatch.setattr(email_svc, "is_configured", lambda: True)
-    monkeypatch.setattr(email_svc, "_deliver",
+    monkeypatch.setattr(email_svc, "smtp_configured", lambda: False)
+    monkeypatch.setattr(email_svc, "_deliver_resend",
                         lambda to, subject, html: sent.append((to, subject, html)) or True)
     return sent
 

@@ -4,6 +4,9 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
 
+/* Must match PUBLIC_CACHEABLE in backend/app/main.py. */
+const PUBLIC_READS = new Set(["/api/services", "/api/stats/public", "/api/search", "/api/search/map"]);
+
 export class ApiError extends Error {
   constructor(public status: number, message: string) {
     super(message);
@@ -43,7 +46,9 @@ export async function api<T>(
   }
   const headers: Record<string, string> = {};
   const t = token();
-  if (t) headers.Authorization = `Bearer ${t}`;
+  // Public directory reads go out anonymous so the CDN can serve them from cache.
+  const isPublicRead = (opts.method ?? "GET") === "GET" && PUBLIC_READS.has(path.split("?")[0]);
+  if (t && !isPublicRead) headers.Authorization = `Bearer ${t}`;
   if (opts.body !== undefined) headers["Content-Type"] = "application/json";
 
   const res = await fetch(url, {

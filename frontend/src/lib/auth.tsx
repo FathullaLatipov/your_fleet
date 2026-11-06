@@ -2,7 +2,7 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 
-import { api, setToken } from "./api";
+import { ApiError, api, setToken } from "./api";
 import type { User } from "./types";
 
 interface AuthState {
@@ -23,16 +23,46 @@ const AuthContext = createContext<AuthState>({
   refresh: async () => {},
 });
 
+/* The last /api/auth/me result, so a page can render immediately on load
+   instead of waiting a full round trip; it's revalidated in the background. */
+const USER_KEY = "yf_user";
+
+function readCachedUser(): User | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as User) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUser(u: User | null) {
+  try {
+    if (u) localStorage.setItem(USER_KEY, JSON.stringify(u));
+    else localStorage.removeItem(USER_KEY);
+  } catch {
+    /* storage unavailable */
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
     try {
-      setUser(await api<User>("/api/auth/me"));
-    } catch {
-      setUser(null);
-      setToken(null);
+      const me = await api<User>("/api/auth/me");
+      // Keep the same object when nothing changed, so pages keyed on `user`
+      // don't refetch their data a second time after the background check.
+      setUser((prev) => (prev && JSON.stringify(prev) === JSON.stringify(me) ? prev : me));
+      writeCachedUser(me);
+    } catch (e) {
+      // Only a rejected token signs you out; a network blip keeps the session.
+      if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        setUser(null);
+        setToken(null);
+        writeCachedUser(null);
+      }
     } finally {
       setLoading(false);
     }
@@ -45,8 +75,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* ignore */
     }
-    if (hasToken) void refresh();
-    else setLoading(false);
+    if (!hasToken) {
+      writeCachedUser(null);
+      setLoading(false);
+      return;
+    }
+    const cached = readCachedUser();
+    if (cached) {
+      setUser(cached);
+      setLoading(false);
+    }
+    void refresh();
   }, [refresh]);
 
   const login = useCallback(async (email: string, password: string) => {
@@ -57,12 +96,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(res.access_token);
     const me = await api<User>("/api/auth/me");
     setUser(me);
+    writeCachedUser(me);
     return me;
   }, []);
 
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
+    writeCachedUser(null);
   }, []);
 
   return (

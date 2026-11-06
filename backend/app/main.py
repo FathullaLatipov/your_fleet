@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import (
@@ -24,6 +25,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# The API sits behind a long proxy hop (Vercel edge -> VPS); the map payload
+# alone is ~560 KB of JSON, so compress before it leaves the box.
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+
+# Public, user-independent reads that the CDN and browser may cache briefly.
+# Business detail is deliberately absent: every view bumps its views_count.
+PUBLIC_CACHEABLE = {"/api/services", "/api/stats/public", "/api/search", "/api/search/map"}
+PUBLIC_CACHE_CONTROL = "public, max-age=60, s-maxage=120, stale-while-revalidate=600"
+
+
+@app.middleware("http")
+async def public_cache_headers(request: Request, call_next):
+    response = await call_next(request)
+    if (request.method == "GET" and request.url.path in PUBLIC_CACHEABLE
+            and response.status_code == 200 and "cache-control" not in response.headers):
+        response.headers["Cache-Control"] = PUBLIC_CACHE_CONTROL
+    return response
 
 for router in (auth.router, businesses.router, claims.router, offers.router,
                bookings.router, reviews.router, me.router, fleet.router,
