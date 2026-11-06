@@ -386,13 +386,6 @@ export function AppShell({ title, children }: { title: string; children: React.R
           </div>
           <div className="flex items-center gap-3">
             <span className="hidden text-sm text-steel sm:inline">{today}</span>
-            <Link
-              href="/repairs#notifications"
-              aria-label="Notifications"
-              className="grid h-9 w-9 place-items-center rounded-lg border border-line text-steel transition-colors hover:bg-mist hover:text-ink"
-            >
-              <NavIcon name="bell" className="h-5 w-5" />
-            </Link>
           </div>
         </div>
 
