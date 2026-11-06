@@ -580,6 +580,26 @@ def download_attachment(wo_id: uuid.UUID, att_id: uuid.UUID,
                         filename=att.original_name or att.filename)
 
 
+@router.delete("/{wo_id}/attachments/{att_id}", status_code=204)
+def delete_attachment(wo_id: uuid.UUID, att_id: uuid.UUID,
+                      user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    """Remove a wrong upload. Closed orders keep their paperwork as filed."""
+    wo = _own_wo(db, user, wo_id)
+    if wo.status == WorkOrderStatus.CLOSED:
+        raise HTTPException(status.HTTP_409_CONFLICT, "The order is closed")
+    att = db.get(WorkOrderAttachment, att_id)
+    if att is None or att.work_order_id != wo.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Attachment not found")
+    try:
+        (_media_dir() / att.filename).unlink(missing_ok=True)
+    except OSError:
+        pass  # the row goes regardless; an orphan file is harmless
+    label = {"photo": "Photo", "invoice": "Invoice", "payment_proof": "Payment proof"}.get(att.kind, "File")
+    _event(db, wo, user, note=f"{label} removed" + (f": {att.original_name}" if att.original_name else ""))
+    db.delete(att)
+    db.commit()
+
+
 # ---------------------------------------------------------------- closing
 
 class CloseIn(BaseModel):

@@ -42,6 +42,156 @@ function dollarsToCents(s: string): number | null {
   return Math.round(n * 100);
 }
 
+/* ------------------------------------------------------------- uploads */
+
+const ACCEPTED = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
+const EXT: Record<string, string> = {
+  "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp", "application/pdf": "pdf",
+};
+
+/* Clipboard screenshots arrive as "image.png" — give them a findable name. */
+function nameFile(f: File, kind: string): File {
+  if (f.name && f.name !== "image.png" && f.name !== "image.jpeg") return f;
+  const stamp = new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "");
+  return new File([f], `${kind}-pasted-${stamp}.${EXT[f.type] ?? "png"}`, { type: f.type });
+}
+
+/* Image preview fetched with the auth header (attachments aren't public). */
+function AttachmentThumb({ woId, a }: { woId: string; a: WoAttachment }) {
+  const [src, setSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!a.content_type?.startsWith("image/")) return;
+    let url: string | null = null;
+    let cancelled = false;
+    fetch(`${API_URL}/api/fleet/work-orders/${woId}/attachments/${a.id}`, { headers: authHeaders() })
+      .then((r) => (r.ok ? r.blob() : null))
+      .then((b) => {
+        if (b && !cancelled) {
+          url = URL.createObjectURL(b);
+          setSrc(url);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [woId, a.id, a.content_type]);
+  if (!a.content_type?.startsWith("image/")) {
+    return <span className="grid h-12 w-12 shrink-0 place-items-center rounded-md bg-mist text-lg">📄</span>;
+  }
+  return src
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img src={src} alt="" className="h-12 w-12 shrink-0 rounded-md border border-line object-cover" />
+    : <span className="h-12 w-12 shrink-0 animate-pulse rounded-md bg-mist" />;
+}
+
+/* One paperwork slot: upload a file, paste (Ctrl+V or the Paste button) or drop. */
+function UploadSlot({
+  woId, kind, title, required, files, uploading, disabled, onFiles, onView, onRemove, onError,
+}: {
+  woId: string;
+  kind: "invoice" | "payment_proof";
+  title: string;
+  required?: boolean;
+  files: WoAttachment[];
+  uploading: boolean;
+  disabled: boolean;
+  onFiles: (files: File[]) => void;
+  onView: (a: WoAttachment) => void;
+  onRemove: (a: WoAttachment) => void;
+  onError: (msg: string) => void;
+}) {
+  const [over, setOver] = useState(false);
+
+  function accept(list: File[]) {
+    const ok = list.filter((f) => ACCEPTED.includes(f.type)).map((f) => nameFile(f, kind));
+    if (ok.length < list.length) onError("Only JPEG, PNG, WebP or PDF files can be attached.");
+    if (ok.length) onFiles(ok);
+  }
+
+  async function pasteButton() {
+    if (!navigator.clipboard?.read) {
+      onError("This browser can't read the clipboard from a button — click the box and press Ctrl+V.");
+      return;
+    }
+    try {
+      const items = await navigator.clipboard.read();
+      const out: File[] = [];
+      for (const item of items) {
+        const type = item.types.find((t) => ACCEPTED.includes(t));
+        if (type) out.push(new File([await item.getType(type)], "image.png", { type }));
+      }
+      if (out.length === 0) onError("There's no image on the clipboard — copy a screenshot or photo first.");
+      else accept(out);
+    } catch {
+      onError("Clipboard access was blocked — click the box and press Ctrl+V instead.");
+    }
+  }
+
+  return (
+    <div
+      tabIndex={0}
+      onPaste={(e) => {
+        const list = Array.from(e.clipboardData.items)
+          .filter((i) => i.kind === "file")
+          .map((i) => i.getAsFile())
+          .filter((f): f is File => f !== null);
+        if (list.length) {
+          e.preventDefault();
+          accept(list);
+        }
+      }}
+      onDragOver={(e) => { e.preventDefault(); setOver(true); }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        accept(Array.from(e.dataTransfer.files));
+      }}
+      className={`rounded-lg border-2 border-dashed p-3 outline-none transition-colors focus:border-pine focus:bg-pine-wash/40 ${
+        over ? "border-pine bg-pine-wash/60" : "border-line"
+      }`}
+    >
+      <p className="text-xs font-semibold text-steel">
+        {title} {required ? <span className="text-danger">*</span> : <span className="font-normal">(optional)</span>}
+      </p>
+
+      {files.length > 0 && (
+        <ul className="mt-2 space-y-1.5">
+          {files.map((a) => (
+            <li key={a.id} className="flex items-center gap-2.5">
+              <button type="button" onClick={() => onView(a)} title="Open">
+                <AttachmentThumb woId={woId} a={a} />
+              </button>
+              <span className="min-w-0 flex-1 truncate text-sm">{a.original_name ?? title}</span>
+              <button type="button" className="text-xs font-semibold text-pine hover:underline"
+                      onClick={() => onView(a)}>view</button>
+              <button type="button" className="text-xs font-semibold text-danger hover:underline"
+                      disabled={disabled} onClick={() => onRemove(a)}>remove</button>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        <label className={`btn-quiet inline-block cursor-pointer !py-1.5 text-xs ${disabled ? "pointer-events-none opacity-50" : ""}`}>
+          {uploading ? "Uploading…" : "Upload file"}
+          <input type="file" multiple accept={ACCEPTED.join(",")} className="hidden"
+                 onChange={(e) => { accept(Array.from(e.target.files ?? [])); e.target.value = ""; }} />
+        </label>
+        <button type="button" className="btn-quiet !py-1.5 text-xs" disabled={disabled}
+                onClick={() => void pasteButton()}>
+          Paste from clipboard
+        </button>
+      </div>
+      <p className="mt-1.5 text-[11px] text-faint">
+        Or drag a file here, or click this box and press Ctrl+V to paste a screenshot.
+      </p>
+    </div>
+  );
+}
+
 /* ------------------------------------------------------------- stepper */
 
 function Stepper({ status }: { status: WorkOrder["status"] }) {
@@ -128,27 +278,44 @@ function WorkOrderInner() {
     }
   }
 
-  async function upload(kind: "photo" | "invoice" | "payment_proof", file: File) {
+  async function upload(kind: "photo" | "invoice" | "payment_proof", input: File | File[]) {
+    const files = Array.isArray(input) ? input : [input];
     setBusy(`upload:${kind}`);
     setActionError(null);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const res = await fetch(
-        `${API_URL}/api/fleet/work-orders/${id}/attachments?kind=${kind}`,
-        { method: "POST", headers: authHeaders(), body: fd },
-      );
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(
-          data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
-            ? data.detail : `Upload failed (${res.status})`,
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append("file", file);
+        const res = await fetch(
+          `${API_URL}/api/fleet/work-orders/${id}/attachments?kind=${kind}`,
+          { method: "POST", headers: authHeaders(), body: fd },
         );
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(
+            data && typeof data === "object" && "detail" in data && typeof data.detail === "string"
+              ? `${file.name}: ${data.detail}` : `Upload failed (${res.status})`,
+          );
+        }
       }
-      const fresh = await api<WorkOrder>(`/api/fleet/work-orders/${id}`);
-      setWo(fresh);
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "Upload failed");
+    } finally {
+      // Refresh even after a partial failure so already-uploaded files show.
+      api<WorkOrder>(`/api/fleet/work-orders/${id}`).then(setWo).catch(() => {});
+      setBusy("");
+    }
+  }
+
+  async function removeAttachment(a: WoAttachment) {
+    if (!window.confirm(`Remove "${a.original_name ?? a.kind}"?`)) return;
+    setBusy(`rm:${a.id}`);
+    setActionError(null);
+    try {
+      await api(`/api/fleet/work-orders/${id}/attachments/${a.id}`, { method: "DELETE" });
+      setWo(await api<WorkOrder>(`/api/fleet/work-orders/${id}`));
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Couldn't remove the file");
     } finally {
       setBusy("");
     }
@@ -423,36 +590,22 @@ function WorkOrderInner() {
         </p>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <div className="rounded-lg border border-line p-3">
-            <p className="text-xs font-semibold text-steel">Shop Invoice <span className="text-danger">*</span></p>
-            {invoices.map((a) => (
-              <p key={a.id} className="mt-1 truncate text-sm">
-                📄 {a.original_name ?? "invoice"}{" "}
-                <button className="text-xs font-semibold text-pine hover:underline"
-                        onClick={() => void downloadAttachment(a)}>view</button>
-              </p>
-            ))}
-            <label className="btn-quiet mt-2 inline-block cursor-pointer !py-1.5 text-xs">
-              {busy === "upload:invoice" ? "Uploading…" : "Upload Invoice"}
-              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden"
-                     onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload("invoice", f); e.target.value = ""; }} />
-            </label>
-          </div>
-          <div className="rounded-lg border border-line p-3">
-            <p className="text-xs font-semibold text-steel">Payment Proof / Check (optional)</p>
-            {proofs.map((a) => (
-              <p key={a.id} className="mt-1 truncate text-sm">
-                🧾 {a.original_name ?? "proof"}{" "}
-                <button className="text-xs font-semibold text-pine hover:underline"
-                        onClick={() => void downloadAttachment(a)}>view</button>
-              </p>
-            ))}
-            <label className="btn-quiet mt-2 inline-block cursor-pointer !py-1.5 text-xs">
-              {busy === "upload:payment_proof" ? "Uploading…" : "Upload Payment Proof"}
-              <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden"
-                     onChange={(e) => { const f = e.target.files?.[0]; if (f) void upload("payment_proof", f); e.target.value = ""; }} />
-            </label>
-          </div>
+          <UploadSlot
+            woId={wo.id} kind="invoice" title="Shop Invoice" required files={invoices}
+            uploading={busy === "upload:invoice"} disabled={busy !== ""}
+            onFiles={(fs) => void upload("invoice", fs)}
+            onView={(a) => void downloadAttachment(a)}
+            onRemove={(a) => void removeAttachment(a)}
+            onError={setActionError}
+          />
+          <UploadSlot
+            woId={wo.id} kind="payment_proof" title="Payment Proof / Check" files={proofs}
+            uploading={busy === "upload:payment_proof"} disabled={busy !== ""}
+            onFiles={(fs) => void upload("payment_proof", fs)}
+            onView={(a) => void downloadAttachment(a)}
+            onRemove={(a) => void removeAttachment(a)}
+            onError={setActionError}
+          />
         </div>
 
         <div className="mt-3 grid gap-3 sm:grid-cols-3">

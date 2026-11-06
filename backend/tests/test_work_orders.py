@@ -161,6 +161,22 @@ class TestWorkOrderFlow:
             "description": "Truck-only PM service"}).json()
         assert wo2["driver_id"] is None and wo2["trailer_id"] is None
 
+    def test_pasted_png_invoice_and_delete(self, client, db):
+        _, h, _, wo = make_wo(client, db, "wo-paste@example.com")
+        png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32  # what a clipboard screenshot uploads
+        r = client.post(f"{BASE}/{wo['id']}/attachments", headers=h,
+                        params={"kind": "invoice"},
+                        files={"file": ("invoice-pasted.png", png, "image/png")})
+        assert r.status_code == 201
+        att = r.json()
+        assert att["content_type"] == "image/png"
+        # Wrong paste -> remove it
+        r = client.delete(f"{BASE}/{wo['id']}/attachments/{att['id']}", headers=h)
+        assert r.status_code == 204
+        detail = client.get(f"{BASE}/{wo['id']}", headers=h).json()
+        assert detail["attachments"] == []
+        assert any("Invoice removed" in (e["note"] or "") for e in detail["events"])
+
     def test_create_requires_unit(self, client, db):
         _, h = fleet_user(client, db, "wo-unit@example.com")
         r = client.post(BASE, headers=h, json={"description": "No unit picked here"})
