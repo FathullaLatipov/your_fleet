@@ -122,6 +122,31 @@ const ICONS: Record<string, React.ReactNode> = {
       <path d="M9 17v-3.5M12 17v-6M15 17v-4.5" strokeLinecap="round" />
     </>
   ),
+  bot: (
+    <>
+      <rect x="4.5" y="8" width="15" height="11" rx="2.5" />
+      <path d="M12 8V4.5M9.5 4.5h5M8.5 15h7" strokeLinecap="round" />
+      <path d="M9.3 11.8h.01M14.7 11.8h.01" strokeLinecap="round" strokeWidth="2.4" />
+    </>
+  ),
+  fuel: (
+    <>
+      <path d="M4.5 21V5.5a2 2 0 0 1 2-2h5a2 2 0 0 1 2 2V21M3 21h12" />
+      <path d="M7 6.5h4.5V11H7zM13.5 10h2l2.5 2.5V19a1.6 1.6 0 0 1-3.2 0v-4h-1.3" />
+    </>
+  ),
+  toll: (
+    <>
+      <path d="M7.5 3.5 4 20.5M16.5 3.5 20 20.5" strokeLinecap="round" />
+      <path d="M12 4v3.2M12 10.4v3.2M12 16.8V20" strokeLinecap="round" />
+    </>
+  ),
+  map: (
+    <>
+      <path d="M12 21s-6.5-5.3-6.5-10.3a6.5 6.5 0 0 1 13 0C18.5 15.7 12 21 12 21Z" />
+      <circle cx="12" cy="10.5" r="2.3" />
+    </>
+  ),
 };
 
 function NavIcon({ name, className = "h-4.5 w-4.5 shrink-0" }: { name: string; className?: string }) {
@@ -137,6 +162,7 @@ interface NavItem {
   href: string;
   label: string;
   icon: string;
+  soon?: boolean;
 }
 
 function isActive(href: string, pathname: string): boolean {
@@ -157,6 +183,11 @@ function SideLink({ item, pathname }: { item: NavItem; pathname: string }) {
     >
       <NavIcon name={item.icon} />
       {item.label}
+      {item.soon && (
+        <span className="ml-auto rounded border border-cta/50 px-1.5 text-[10px] font-bold uppercase tracking-wide text-cta">
+          Soon
+        </span>
+      )}
     </Link>
   );
 }
@@ -213,45 +244,26 @@ export function AppShell({ title, children }: { title: string; children: React.R
     );
   }
 
+  // Exact order the client asked for; everything else stays reachable from
+  // the dashboard and in-page links, just not in the tab bar.
   const groups: { label: string; items: NavItem[] }[] = [
-    { label: "Overview", items: [{ href: "/dashboard", label: "Dashboard", icon: "gauge" }] },
     {
-      label: "Fleet",
+      label: "",
       items: [
+        { href: "/dashboard", label: "Dashboard", icon: "gauge" },
         { href: "/fleet", label: "Trucks", icon: "truck" },
         { href: "/trailers", label: "Trailers", icon: "trailer" },
         { href: "/drivers", label: "Drivers", icon: "users" },
-      ],
-    },
-    {
-      label: "Operations",
-      items: [
         { href: "/work-orders", label: "Work orders", icon: "clipboard" },
-        { href: "/issues", label: "Issues", icon: "alert" },
-        { href: "/tasks", label: "Tasks", icon: "check" },
-        { href: "/deadlines", label: "Deadlines", icon: "calendar" },
-        { href: "/repairs", label: "Repairs", icon: "wrench" },
-        { href: "/comm-log", label: "Comm log", icon: "chat" },
-      ],
-    },
-    {
-      label: "Finance",
-      items: [
-        { href: "/service-records", label: "Service records", icon: "records" },
-        { href: "/expenses", label: "Expenses", icon: "dollar" },
-        { href: "/loans", label: "Loans", icon: "bank" },
-      ],
-    },
-    {
-      label: "Insights",
-      items: [
-        { href: "/analytics", label: "Analytics", icon: "chart" },
+        { href: "/ai-dispatch", label: "AI Dispatch", icon: "bot", soon: true },
         { href: "/reports", label: "Reports", icon: "report" },
+        { href: "/fuel", label: "Fuel", icon: "fuel", soon: true },
+        { href: "/toll", label: "Toll", icon: "toll", soon: true },
+        { href: "/search", label: "Map", icon: "map" },
       ],
     },
   ];
-  const siteItems: NavItem[] = [{ href: "/search", label: "Find repair", icon: "search" }];
-  const allItems = [...groups.flatMap((g) => g.items), ...siteItems];
+  const allItems = groups.flatMap((g) => g.items);
 
   const today = new Date().toLocaleDateString("en-US", {
     weekday: "long",
@@ -268,18 +280,14 @@ export function AppShell({ title, children }: { title: string; children: React.R
           <span className="display text-xl font-bold tracking-tight text-white">YourFleet</span>
         </Link>
         <nav className="flex-1 overflow-y-auto px-3 py-2">
-          {groups.map((g) => (
-            <div key={g.label} className="mb-1.5">
-              <p className="px-3 pb-1 pt-2 text-xs text-white/40">{g.label}</p>
+          {groups.map((g, gi) => (
+            <div key={g.label || gi} className="mb-1.5">
+              {g.label && <p className="px-3 pb-1 pt-2 text-xs text-white/40">{g.label}</p>}
               <div className="space-y-0.5">
                 {g.items.map((item) => <SideLink key={item.href} item={item} pathname={pathname} />)}
               </div>
             </div>
           ))}
-          <div className="my-3 border-t border-white/10" />
-          <div className="space-y-0.5">
-            {siteItems.map((item) => <SideLink key={item.href} item={item} pathname={pathname} />)}
-          </div>
         </nav>
         <div className="border-t border-white/10 px-5 py-4">
           {user.carrier_name ? (
