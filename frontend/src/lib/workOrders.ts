@@ -82,17 +82,28 @@ export const WO_STATUS_LABELS: Record<WoStatus, string> = {
   closed: "Closed",
 };
 
+/* Order = dropdown order. Must match WorkOrderServiceType in backend/app/models.py. */
 export const WO_SERVICE_LABELS: Record<string, string> = {
   repair: "Repair",
-  preventive: "Preventive",
+  pm: "PM",
   inspection: "Inspection",
-  other: "Other",
+  roadside: "Roadside service",
+  towing: "Towing",
+  parking: "Parking",
+  truck_wash: "Truck wash",
+  order_parts: "Order parts",
 };
 
 export const WO_PRIORITY_LABELS: Record<string, string> = {
   normal: "Normal",
   urgent: "Urgent",
-  roadside: "Roadside",
+};
+
+/* Directory service to pre-filter the shop map with, per work order type. */
+export const WO_SERVICE_MAP_FILTER: Record<string, string> = {
+  towing: "towing",
+  roadside: "mobile-roadside",
+  pm: "pm-service",
 };
 
 export const WO_PAY_LABELS: Record<string, string> = {

@@ -13,6 +13,7 @@ import {
   WO_PAY_LABELS,
   WO_PRIORITY_LABELS,
   WO_SERVICE_LABELS,
+  WO_SERVICE_MAP_FILTER,
   WO_STATUS_LABELS,
   WO_STATUS_ORDER,
   WoAttachment,
@@ -260,6 +261,12 @@ function WorkOrderInner() {
     if (user) load();
   }, [user, load]);
 
+  // Roadside and towing jobs default to a roadside call.
+  const serviceType = wo?.service_type;
+  useEffect(() => {
+    if (serviceType === "roadside" || serviceType === "towing") setCallType("roadside");
+  }, [serviceType]);
+
   async function act(key: string, path: string, body?: unknown) {
     setBusy(key);
     setActionError(null);
@@ -473,7 +480,8 @@ function WorkOrderInner() {
                   onClick={() => void act("send", "/send", { call_type: callType, shop_name: assignShop.trim() || null })}>
             {busy === "send" ? "Sending…" : assignShop.trim() ? "Assign Shop" : "Send Request"}
           </button>
-          <Link href={`/map?assign_wo=${wo.id}&wo=${wo.wo_number}${wo.priority === "roadside" ? "&service=towing" : ""}`}
+          <Link href={`/map?assign_wo=${wo.id}&wo=${wo.wo_number}${
+                  WO_SERVICE_MAP_FILTER[wo.service_type] ? `&service=${WO_SERVICE_MAP_FILTER[wo.service_type]}` : ""}`}
                 className="btn-quiet !py-2 text-sm">
             Select Preferred Shop on the map
           </Link>

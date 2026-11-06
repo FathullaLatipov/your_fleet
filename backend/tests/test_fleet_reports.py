@@ -51,6 +51,44 @@ class TestReports:
         assert r.status_code == 200 and r.content[:5] == b"%PDF-"
         assert 'filename="YourFleet' in r.headers["content-disposition"]
 
+    def test_workorders_report_by_service_type(self, client, db):
+        from app.models import WorkOrder, WorkOrderStatus
+
+        h, v = seed(client, db, "rep-wo@example.com")
+        for stype, cents in (("towing", 65000), ("truck_wash", 9000), ("towing", 40000)):
+            wo = client.post("/api/fleet/work-orders", headers=h, json={
+                "vehicle_id": v["id"], "service_type": stype, "priority": "urgent",
+                "description": f"{stype} job"}).json()
+            row = db.get(WorkOrder, wo["id"])
+            row.status = WorkOrderStatus.CLOSED
+            row.closed_at = utcnow()
+            row.final_amount_cents = cents
+        db.commit()
+
+        rep = client.get(f"{BASE}/workorders", headers=h, params={"period": "all"}).json()
+        rows = rep["sections"][0]["rows"]
+        assert {r[3] for r in rows} == {"Towing", "Truck wash"}
+        by_type = {r[0]: (r[1], r[2]) for r in rep["sections"][1]["rows"]}
+        assert by_type == {"Towing": (2, 105000), "Truck wash": (1, 9000)}
+
+        # Filter to one service type
+        rep = client.get(f"{BASE}/workorders", headers=h,
+                         params={"period": "all", "service_type": "towing"}).json()
+        assert len(rep["sections"]) == 1
+        assert {r[3] for r in rep["sections"][0]["rows"]} == {"Towing"}
+        assert ["Service type", "Towing"] in rep["summary"]
+
+        # Catalog exposes the list for the filter
+        cat = client.get(BASE, headers=h).json()
+        assert {"key": "order_parts", "label": "Order parts"} in cat["service_types"]
+
+    def test_old_priority_and_type_rejected(self, client, db):
+        h, v = seed(client, db, "rep-old@example.com")
+        for body in ({"priority": "roadside"}, {"service_type": "preventive"}):
+            r = client.post("/api/fleet/work-orders", headers=h, json={
+                "vehicle_id": v["id"], "description": "Old values", **body})
+            assert r.status_code == 422
+
     def test_unknown_report_and_rbac(self, client, db):
         h, _ = seed(client, db, "rep3@example.com")
         assert client.get(f"{BASE}/nope", headers=h).status_code == 404

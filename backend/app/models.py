@@ -535,15 +535,18 @@ class WorkOrderStatus(str, enum.Enum):
 
 class WorkOrderServiceType(str, enum.Enum):
     REPAIR = "repair"
-    PREVENTIVE = "preventive"
+    PM = "pm"
     INSPECTION = "inspection"
-    OTHER = "other"
+    ROADSIDE = "roadside"
+    TOWING = "towing"
+    PARKING = "parking"
+    TRUCK_WASH = "truck_wash"
+    ORDER_PARTS = "order_parts"
 
 
 class WorkOrderPriority(str, enum.Enum):
     NORMAL = "normal"
     URGENT = "urgent"
-    ROADSIDE = "roadside"
 
 
 class WorkOrderPayMethod(str, enum.Enum):

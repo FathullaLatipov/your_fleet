@@ -12,11 +12,12 @@ interface ReportMeta {
   key: string;
   name: string;
   desc: string;
-  filters: ("truck" | "period")[];
+  filters: ("truck" | "period" | "service_type")[];
 }
 interface Catalog {
   reports: ReportMeta[];
   periods: { key: string; label: string }[];
+  service_types: { key: string; label: string }[];
   trucks: { vehicle_id: string; unit_number: string; financed: boolean }[];
 }
 interface ReportColumn { h: string; t: string; w?: number }
@@ -53,7 +54,7 @@ function ReportsInner() {
   const { user } = useAuth();
   const [catalog, setCatalog] = useState<Catalog | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [opts, setOpts] = useState<Record<string, { truck: string; period: string }>>({});
+  const [opts, setOpts] = useState<Record<string, { truck: string; period: string; serviceType: string }>>({});
   const [preview, setPreview] = useState<{ key: string; rep: Report } | null>(null);
   const [busy, setBusy] = useState("");
   const previewRef = useRef<HTMLDivElement | null>(null);
@@ -73,13 +74,14 @@ function ReportsInner() {
     if (preview && previewRef.current) previewRef.current.scrollIntoView({ block: "start", behavior: "smooth" });
   }, [preview]);
 
-  const optFor = (key: string) => opts[key] ?? { truck: "", period: "ytd" };
+  const optFor = (key: string) => opts[key] ?? { truck: "", period: "ytd", serviceType: "" };
 
   function queryFor(key: string): string {
     const o = optFor(key);
     const qs = new URLSearchParams();
     if (o.truck) qs.set("vehicle_id", o.truck);
     qs.set("period", o.period);
+    if (o.serviceType) qs.set("service_type", o.serviceType);
     return qs.toString();
   }
 
@@ -246,6 +248,16 @@ function ReportsInner() {
                       <option value="">{r.key === "loan" ? "All financed trucks" : "All trucks"}</option>
                       {trucks.map((t) => (
                         <option key={t.vehicle_id} value={t.vehicle_id}>#{t.unit_number}</option>
+                      ))}
+                    </select>
+                  )}
+                  {r.filters.includes("service_type") && (
+                    <select className="field !w-auto !py-1.5 text-sm" aria-label="Service type filter"
+                            value={o.serviceType}
+                            onChange={(e) => setOpts({ ...opts, [r.key]: { ...o, serviceType: e.target.value } })}>
+                      <option value="">All service types</option>
+                      {catalog.service_types.map((s) => (
+                        <option key={s.key} value={s.key}>{s.label}</option>
                       ))}
                     </select>
                   )}

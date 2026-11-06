@@ -30,6 +30,12 @@ router = APIRouter(prefix="/api/fleet/reports", tags=["fleet"])
 
 PERIODS = {"ytd": "This year", "90": "Last 90 days", "30": "Last 30 days", "all": "All time"}
 
+SERVICE_TYPE_LABELS = {
+    "repair": "Repair", "pm": "PM", "inspection": "Inspection",
+    "roadside": "Roadside service", "towing": "Towing", "parking": "Parking",
+    "truck_wash": "Truck wash", "order_parts": "Order parts",
+}
+
 CATALOG = [
     {"key": "loan", "name": "Loan schedule",
      "desc": "Monthly payment, principal, interest and balance for each financed truck.",
@@ -38,8 +44,8 @@ CATALOG = [
      "desc": "Every repair and service by truck, with shop and cost.",
      "filters": ["truck", "period"]},
     {"key": "workorders", "name": "Work orders",
-     "desc": "Closed work orders: shop, payment method, discount and final amount.",
-     "filters": ["period"]},
+     "desc": "Closed work orders by service type: shop, payment method, discount and final amount.",
+     "filters": ["period", "service_type"]},
     {"key": "cost", "name": "Monthly fleet cost",
      "desc": "Repairs, truck loans and trailer leases, month by month.",
      "filters": []},
@@ -161,12 +167,15 @@ def build_maint(db: Session, user: User, one: Vehicle | None, period: str) -> di
     }
 
 
-def build_workorders(db: Session, user: User, period: str) -> dict:
+def build_workorders(db: Session, user: User, period: str,
+                     service_type: str | None = None) -> dict:
     q = select(WorkOrder).where(WorkOrder.owner_user_id == user.id,
                                 WorkOrder.status == WorkOrderStatus.CLOSED)
     start = _period_start(period)
     if start is not None:
         q = q.where(WorkOrder.closed_at >= start)
+    if service_type:
+        q = q.where(WorkOrder.service_type == service_type)
     orders = db.execute(q.order_by(WorkOrder.closed_at.desc())).scalars().all()
     units = {v.id: v.unit_number for v in db.execute(
         select(Vehicle).where(Vehicle.owner_user_id == user.id)).scalars()}
@@ -176,28 +185,48 @@ def build_workorders(db: Session, user: User, period: str) -> dict:
         f"WO-{wo.wo_number}",
         wo.closed_at.date().isoformat() if wo.closed_at else "",
         f"#{units.get(wo.vehicle_id, '')}" if wo.vehicle_id else "",
+        SERVICE_TYPE_LABELS.get(wo.service_type.value, wo.service_type.value),
         wo.shop_name or "",
         (wo.description or "")[:120],
         pay_labels.get(wo.payment_method.value if wo.payment_method else "", ""),
         wo.discount_cents or 0,
         wo.final_amount_cents or 0,
     ] for wo in orders]
-    total = sum(r[7] for r in rows)
+    total = sum(r[8] for r in rows)
+
+    by_type: dict[str, list[int]] = {}
+    for r in rows:
+        agg = by_type.setdefault(r[3], [0, 0])
+        agg[0] += 1
+        agg[1] += r[8]
+    type_rows = [[label, n, cents] for label, (n, cents) in
+                 sorted(by_type.items(), key=lambda kv: -kv[1][1])]
+
+    scope = SERVICE_TYPE_LABELS[service_type] if service_type else "All service types"
+    sections = [{
+        "heading": "Closed work orders",
+        "columns": [_col("WO #", w=.6), _col("Closed", "date", .8), _col("Truck", w=.55),
+                    _col("Service type", w=1.0), _col("Shop", w=1.3),
+                    _col("Description", w=2.0), _col("Payment", w=.9),
+                    _col("Discount", "money", .8), _col("Final", "money", .8)],
+        "rows": rows,
+        "totals": ["Total", "", "", "", "", "", "", sum(r[7] for r in rows), total],
+    }]
+    if not service_type and type_rows:
+        sections.append({
+            "heading": "By service type",
+            "columns": [_col("Service type", w=1.4), _col("Orders", "int", .7),
+                        _col("Total paid", "money", 1.0)],
+            "rows": type_rows,
+            "totals": ["Total", len(rows), total],
+        })
     return {
         "title": "Work orders",
-        "subtitle": f"Closed work orders - {PERIODS[period]}",
+        "subtitle": f"Closed work orders - {scope} - {PERIODS[period]}",
         "summary": [["Closed orders", str(len(rows))], ["Total paid", _money(total)],
-                    ["Discounts", _money(sum(r[6] for r in rows))],
-                    ["Period", PERIODS[period]]],
-        "sections": [{
-            "heading": "Closed work orders",
-            "columns": [_col("WO #", w=.6), _col("Closed", "date", .8), _col("Truck", w=.55),
-                        _col("Shop", w=1.4), _col("Description", w=2.2),
-                        _col("Payment", w=.9), _col("Discount", "money", .8),
-                        _col("Final", "money", .8)],
-            "rows": rows,
-            "totals": ["Total", "", "", "", "", "", sum(r[6] for r in rows), total],
-        }],
+                    ["Discounts", _money(sum(r[7] for r in rows))],
+                    ["Service type", scope]],
+        "sections": sections,
     }
 
 
@@ -298,6 +327,7 @@ def report_catalog(user: User = Depends(fleet_user), db: Session = Depends(get_d
     return {
         "reports": CATALOG,
         "periods": [{"key": k, "label": v} for k, v in PERIODS.items()],
+        "service_types": [{"key": k, "label": v} for k, v in SERVICE_TYPE_LABELS.items()],
         "trucks": [{"vehicle_id": str(v.id), "unit_number": v.unit_number,
                     "financed": v.id in financed} for v in vehicles],
     }
@@ -308,6 +338,9 @@ def get_report(key: str,
                format: str = Query(default="json", pattern="^(json|xlsx|pdf)$"),
                vehicle_id: uuid.UUID | None = Query(default=None),
                period: str = Query(default="ytd", pattern="^(ytd|90|30|all)$"),
+               service_type: str | None = Query(
+                   default=None,
+                   pattern="^(repair|pm|inspection|roadside|towing|parking|truck_wash|order_parts)$"),
                user: User = Depends(fleet_user), db: Session = Depends(get_db)):
     one = _own_unit(db, user, vehicle_id)
     if key == "loan":
@@ -315,7 +348,7 @@ def get_report(key: str,
     elif key == "maint":
         rep = build_maint(db, user, one, period)
     elif key == "workorders":
-        rep = build_workorders(db, user, period)
+        rep = build_workorders(db, user, period, service_type)
     elif key == "cost":
         rep = build_cost(db, user)
     elif key == "compliance":
