@@ -63,11 +63,25 @@ class TestReports:
             row.status = WorkOrderStatus.CLOSED
             row.closed_at = utcnow()
             row.final_amount_cents = cents
+            row.closing_notes = f"{stype} paid on site"
         db.commit()
 
+        # Excel: notes column filled, summary labels not cut off in column A
+        r = client.get(f"{BASE}/workorders", headers=h, params={"period": "all", "format": "xlsx"})
+        import openpyxl
+        ws = openpyxl.load_workbook(io.BytesIO(r.content)).worksheets[0]
+        cells = [c.value for row in ws.iter_rows() for c in row if c.value]
+        assert "towing paid on site" in cells and "Notes" in cells
+        assert ws.column_dimensions["A"].width >= len("Closed orders") + 2
+        r = client.get(f"{BASE}/workorders", headers=h, params={"period": "all", "format": "pdf"})
+        assert r.status_code == 200 and r.content[:5] == b"%PDF-"
+
         rep = client.get(f"{BASE}/workorders", headers=h, params={"period": "all"}).json()
+        headers = [c["h"] for c in rep["sections"][0]["columns"]]
+        assert headers == ["WO #", "Closed", "Truck", "Shop", "Service type", "Description",
+                           "Payment", "Discount", "Final", "Notes"]
         rows = rep["sections"][0]["rows"]
-        assert {r[3] for r in rows} == {"Towing", "Truck wash"}
+        assert {r[4] for r in rows} == {"Towing", "Truck wash"}
         by_type = {r[0]: (r[1], r[2]) for r in rep["sections"][1]["rows"]}
         assert by_type == {"Towing": (2, 105000), "Truck wash": (1, 9000)}
 
@@ -75,7 +89,7 @@ class TestReports:
         rep = client.get(f"{BASE}/workorders", headers=h,
                          params={"period": "all", "service_type": "towing"}).json()
         assert len(rep["sections"]) == 1
-        assert {r[3] for r in rep["sections"][0]["rows"]} == {"Towing"}
+        assert {r[4] for r in rep["sections"][0]["rows"]} == {"Towing"}
         assert ["Service type", "Towing"] in rep["summary"]
 
         # Catalog exposes the list for the filter

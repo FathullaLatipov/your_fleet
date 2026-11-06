@@ -181,36 +181,41 @@ def build_workorders(db: Session, user: User, period: str,
         select(Vehicle).where(Vehicle.owner_user_id == user.id)).scalars()}
     pay_labels = {"driver_paid": "Paid by Driver", "efs": "EFS", "comchek": "Comchek",
                   "zelle": "Zelle", "ach": "ACH"}
+    # Column order follows the client's layout:
+    # WO # | Closed | Truck | Shop | Service type | Description | Payment | Discount | Final | Notes
+    TYPE, DISCOUNT, FINAL = 4, 7, 8
     rows = [[
         f"WO-{wo.wo_number}",
         wo.closed_at.date().isoformat() if wo.closed_at else "",
         f"#{units.get(wo.vehicle_id, '')}" if wo.vehicle_id else "",
-        SERVICE_TYPE_LABELS.get(wo.service_type.value, wo.service_type.value),
         wo.shop_name or "",
+        SERVICE_TYPE_LABELS.get(wo.service_type.value, wo.service_type.value),
         (wo.description or "")[:120],
         pay_labels.get(wo.payment_method.value if wo.payment_method else "", ""),
         wo.discount_cents or 0,
         wo.final_amount_cents or 0,
+        (wo.closing_notes or "").strip(),
     ] for wo in orders]
-    total = sum(r[8] for r in rows)
+    total = sum(r[FINAL] for r in rows)
 
     by_type: dict[str, list[int]] = {}
     for r in rows:
-        agg = by_type.setdefault(r[3], [0, 0])
+        agg = by_type.setdefault(r[TYPE], [0, 0])
         agg[0] += 1
-        agg[1] += r[8]
+        agg[1] += r[FINAL]
     type_rows = [[label, n, cents] for label, (n, cents) in
                  sorted(by_type.items(), key=lambda kv: -kv[1][1])]
 
     scope = SERVICE_TYPE_LABELS[service_type] if service_type else "All service types"
     sections = [{
         "heading": "Closed work orders",
-        "columns": [_col("WO #", w=.6), _col("Closed", "date", .8), _col("Truck", w=.55),
-                    _col("Service type", w=1.0), _col("Shop", w=1.3),
-                    _col("Description", w=2.0), _col("Payment", w=.9),
-                    _col("Discount", "money", .8), _col("Final", "money", .8)],
+        "columns": [_col("WO #", w=.55), _col("Closed", "date", .75), _col("Truck", w=.5),
+                    _col("Shop", w=1.2), _col("Service type", w=.95),
+                    _col("Description", w=1.6), _col("Payment", w=.75),
+                    _col("Discount", "money", .7), _col("Final", "money", .7),
+                    _col("Notes", w=1.4)],
         "rows": rows,
-        "totals": ["Total", "", "", "", "", "", "", sum(r[7] for r in rows), total],
+        "totals": ["Total", "", "", "", "", "", "", sum(r[DISCOUNT] for r in rows), total, ""],
     }]
     if not service_type and type_rows:
         sections.append({

@@ -94,12 +94,15 @@ def report_to_xlsx(rep: dict) -> bytes:
         if sec.get("totals"):
             write_row(sec["totals"], bold=True)
 
+        # The summary block (label in A, value in B) shares the first two
+        # columns with the table, so they must fit it too.
+        summary = rep.get("summary", []) if si == 0 else []
         for ci, c in enumerate(cols, start=1):
-            width = max(
-                len(c["h"]) + 2,
-                *(len(_fmt(r[ci - 1], c["t"])) + 2 for r in sec["rows"][:200]) if sec["rows"] else (10,),
-            )
-            ws.column_dimensions[get_column_letter(ci)].width = min(50, max(10, width))
+            candidates = [len(c["h"]) + 2]
+            candidates += [len(_fmt(r[ci - 1], c["t"])) + 2 for r in sec["rows"][:200]]
+            if ci in (1, 2):
+                candidates += [len(str(pair[ci - 1])) + 2 for pair in summary]
+            ws.column_dimensions[get_column_letter(ci)].width = min(50, max(10, *candidates))
 
     buf = BytesIO()
     wb.save(buf)
