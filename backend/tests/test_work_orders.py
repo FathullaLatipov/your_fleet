@@ -139,6 +139,28 @@ class TestWorkOrderFlow:
         assert client.post(f"{BASE}/{wo['id']}/assign-shop", headers=h,
                            json={}).status_code == 422
 
+    def test_truck_brings_its_driver_and_trailer(self, client, db):
+        _, h = fleet_user(client, db, "wo-link@example.com")
+        v = add_vehicle(client, h, unit="L43")
+        d = client.post("/api/fleet/drivers", headers=h, json={"name": "Mannie Brown"}).json()
+        client.patch(f"/api/fleet/drivers/{d['id']}", headers=h,
+                     json={"assigned_vehicle_id": v["id"]})
+        t = client.post("/api/fleet/trailers", headers=h, json={"unit_number": "T-43"}).json()
+        client.patch(f"/api/fleet/trailers/{t['id']}", headers=h,
+                     json={"assigned_vehicle_id": v["id"]})
+
+        # Only the truck given -> driver and trailer come along
+        wo = client.post(BASE, headers=h, json={
+            "vehicle_id": v["id"], "description": "Air leak at the gladhands"}).json()
+        assert wo["driver_id"] == d["id"] and wo["driver_name"] == "Mannie Brown"
+        assert wo["trailer_id"] == t["id"] and wo["trailer_unit"] == "T-43"
+
+        # Explicit nulls (console form "— none —") are respected
+        wo2 = client.post(BASE, headers=h, json={
+            "vehicle_id": v["id"], "driver_id": None, "trailer_id": None,
+            "description": "Truck-only PM service"}).json()
+        assert wo2["driver_id"] is None and wo2["trailer_id"] is None
+
     def test_create_requires_unit(self, client, db):
         _, h = fleet_user(client, db, "wo-unit@example.com")
         r = client.post(BASE, headers=h, json={"description": "No unit picked here"})

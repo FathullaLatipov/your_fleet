@@ -13,14 +13,19 @@ const API_URL =
   process.env.NEXT_PUBLIC_API_URL ??
   (process.env.NODE_ENV === "production" ? "" : "http://localhost:8000");
 
-interface Opt { id: string; unit_number?: string; name?: string }
+interface TruckOpt { id: string; unit_number: string; operator_name: string | null; trailer_unit: string | null }
+interface TrailerOpt { id: string; unit_number: string; assigned_vehicle_id: string | null }
+interface DriverOpt { id: string; name: string; assigned_vehicle_id: string | null }
+
+const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase().replace(/^#/, "");
 
 function NewRequestInner() {
   const { user } = useAuth();
   const router = useRouter();
-  const [vehicles, setVehicles] = useState<Opt[]>([]);
-  const [trailers, setTrailers] = useState<Opt[]>([]);
-  const [drivers, setDrivers] = useState<Opt[]>([]);
+  const [vehicles, setVehicles] = useState<TruckOpt[]>([]);
+  const [trailers, setTrailers] = useState<TrailerOpt[]>([]);
+  const [drivers, setDrivers] = useState<DriverOpt[]>([]);
+  const [autoNote, setAutoNote] = useState<string | null>(null);
   const [vehicleId, setVehicleId] = useState("");
   const [trailerId, setTrailerId] = useState("");
   const [driverId, setDriverId] = useState("");
@@ -33,10 +38,43 @@ function NewRequestInner() {
 
   useEffect(() => {
     if (!user) return;
-    api<Opt[]>("/api/fleet/vehicles").then(setVehicles).catch(() => {});
-    api<Opt[]>("/api/fleet/trailers").then(setTrailers).catch(() => {});
-    api<Opt[]>("/api/fleet/drivers").then(setDrivers).catch(() => {});
+    api<TruckOpt[]>("/api/fleet/vehicles").then(setVehicles).catch(() => {});
+    api<TrailerOpt[]>("/api/fleet/trailers").then(setTrailers).catch(() => {});
+    api<DriverOpt[]>("/api/fleet/drivers").then(setDrivers).catch(() => {});
   }, [user]);
+
+  /* Picking a truck brings its assigned driver and hooked trailer along.
+     The roster link (assigned_vehicle_id) wins; the truck's own operator /
+     trailer text (from imports) is the fallback, matched by name/unit. */
+  function pickTruck(id: string) {
+    setVehicleId(id);
+    const truck = vehicles.find((v) => v.id === id);
+    if (!truck) {
+      setAutoNote(null);
+      return;
+    }
+    const driver = drivers.find((d) => d.assigned_vehicle_id === id)
+      ?? (truck.operator_name ? drivers.find((d) => norm(d.name) === norm(truck.operator_name)) : undefined);
+    const trailer = trailers.find((t) => t.assigned_vehicle_id === id)
+      ?? (truck.trailer_unit ? trailers.find((t) => norm(t.unit_number) === norm(truck.trailer_unit)) : undefined);
+    setDriverId(driver?.id ?? "");
+    setTrailerId(trailer?.id ?? "");
+
+    const filled = [driver && `driver ${driver.name}`, trailer && `trailer #${trailer.unit_number}`].filter(Boolean);
+    const missing: string[] = [];
+    if (!driver && truck.operator_name) {
+      missing.push(`operator ${truck.operator_name} isn't in your Drivers list yet`);
+    }
+    if (!trailer && truck.trailer_unit) {
+      missing.push(`trailer ${truck.trailer_unit} isn't in your Trailers list yet`);
+    }
+    setAutoNote(
+      [
+        filled.length ? `Filled in from truck #${truck.unit_number}: ${filled.join(" and ")}.` : "",
+        missing.length ? `Note: ${missing.join("; ")}.` : "",
+      ].filter(Boolean).join(" ") || null,
+    );
+  }
 
   async function submit() {
     if (!vehicleId && !trailerId) {
@@ -96,7 +134,7 @@ function NewRequestInner() {
           <div>
             <label className="text-xs font-medium text-steel" htmlFor="wo-truck">Truck</label>
             <select id="wo-truck" className="field mt-1 !py-2 text-sm" value={vehicleId}
-                    onChange={(e) => setVehicleId(e.target.value)}>
+                    onChange={(e) => pickTruck(e.target.value)}>
               <option value="">— none —</option>
               {vehicles.map((v) => <option key={v.id} value={v.id}>#{v.unit_number}</option>)}
             </select>
@@ -128,6 +166,10 @@ function NewRequestInner() {
             </select>
           </div>
         </div>
+
+        {autoNote && (
+          <p className="mt-3 rounded-lg bg-pine-wash px-3 py-2 text-xs text-pine">{autoNote}</p>
+        )}
 
         <div className="mt-4">
           <span className="text-xs font-medium text-steel">Priority</span>

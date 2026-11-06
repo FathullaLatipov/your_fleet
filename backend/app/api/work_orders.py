@@ -218,13 +218,29 @@ def create_work_order(body: WorkOrderIn, user: User = Depends(fleet_user),
         if d is None or d.owner_user_id != user.id:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Unknown driver")
 
+    # A request that names only the truck (e.g. from the driver app) gets the
+    # truck's assigned driver and hooked trailer. An explicit null — "none"
+    # picked in the console form — is respected and left empty.
+    driver_id, trailer_id = body.driver_id, body.trailer_id
+    if body.vehicle_id is not None:
+        if "driver_id" not in body.model_fields_set:
+            driver_id = db.execute(
+                select(FleetDriver.id).where(FleetDriver.owner_user_id == user.id,
+                                             FleetDriver.assigned_vehicle_id == body.vehicle_id)
+            ).scalars().first()
+        if "trailer_id" not in body.model_fields_set:
+            trailer_id = db.execute(
+                select(Trailer.id).where(Trailer.owner_user_id == user.id,
+                                         Trailer.assigned_vehicle_id == body.vehicle_id)
+            ).scalars().first()
+
     next_no = (db.execute(
         select(func.max(WorkOrder.wo_number)).where(WorkOrder.owner_user_id == user.id)
     ).scalar() or 0) + 1
     wo = WorkOrder(
         owner_user_id=user.id, wo_number=next_no,
-        vehicle_id=body.vehicle_id, trailer_id=body.trailer_id,
-        driver_id=body.driver_id, service_type=body.service_type,
+        vehicle_id=body.vehicle_id, trailer_id=trailer_id,
+        driver_id=driver_id, service_type=body.service_type,
         priority=body.priority, description=body.description.strip(),
     )
     db.add(wo)

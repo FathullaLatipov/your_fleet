@@ -39,6 +39,7 @@ from app.schemas import (
     VehicleUpdateIn,
 )
 from app.security import require_roles
+from app.services.fleet_links import link_operator, link_trailer
 from app.services.geo import SearchFilters, search_businesses
 from app.services.maintenance import check_vehicle_maintenance, schedule_status
 
@@ -144,6 +145,9 @@ def create_vehicle(body: VehicleIn, user: User = Depends(fleet_user),
         v.odometer_updated_at = utcnow()
         v.odometer_source = "manual"
     db.add(v)
+    db.flush()  # the roster links below need v.id
+    link_operator(db, v, None)
+    link_trailer(db, v, None)
     db.commit()
     return _vehicle_out(db, v)
 
@@ -152,8 +156,14 @@ def create_vehicle(body: VehicleIn, user: User = Depends(fleet_user),
 def update_vehicle(vehicle_id: uuid.UUID, body: VehicleUpdateIn,
                    user: User = Depends(fleet_user), db: Session = Depends(get_db)):
     v = _own_vehicle(vehicle_id, user, db)
-    for k, val in body.model_dump(exclude_unset=True).items():
+    data = body.model_dump(exclude_unset=True)
+    old_operator, old_trailer = v.operator_name, v.trailer_unit
+    for k, val in data.items():
         setattr(v, k, val)
+    if "operator_name" in data:
+        link_operator(db, v, old_operator)
+    if "trailer_unit" in data:
+        link_trailer(db, v, old_trailer)
     db.commit()
     return _vehicle_out(db, v)
 

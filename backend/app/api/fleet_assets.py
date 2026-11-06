@@ -174,8 +174,15 @@ def update_trailer(trailer_id: uuid.UUID, body: TrailerUpdateIn,
                    user: User = Depends(fleet_user), db: Session = Depends(get_db)):
     t = _own_trailer(trailer_id, user, db)
     data = body.model_dump(exclude_unset=True)
+    hooked_to = None
     if data.get("assigned_vehicle_id") is not None:
-        _assignable_vehicle(data["assigned_vehicle_id"], user, db)
+        hooked_to = _assignable_vehicle(data["assigned_vehicle_id"], user, db)
+    # Unhooking clears the old truck's trailer text if it named this trailer.
+    if "assigned_vehicle_id" in data and t.assigned_vehicle_id is not None \
+            and t.assigned_vehicle_id != data["assigned_vehicle_id"]:
+        prev = db.get(Vehicle, t.assigned_vehicle_id)
+        if prev is not None and (prev.trailer_unit or "").strip().lstrip("#") == t.unit_number:
+            prev.trailer_unit = None
     if "unit_number" in data and data["unit_number"] != t.unit_number:
         dup = db.execute(select(Trailer).where(
             Trailer.owner_user_id == user.id,
@@ -187,6 +194,9 @@ def update_trailer(trailer_id: uuid.UUID, body: TrailerUpdateIn,
                                 f"Trailer {data['unit_number']} already exists in your fleet")
     for k, val in data.items():
         setattr(t, k, val)
+    if hooked_to is not None:
+        # The truck card and work orders show the hooked trailer.
+        hooked_to.trailer_unit = t.unit_number
     db.commit()
     return _trailer_out(t, _unit_map(db, user))
 
@@ -289,6 +299,12 @@ def update_driver(driver_id: uuid.UUID, body: DriverUpdateIn,
     vehicle = None
     if data.get("assigned_vehicle_id") is not None:
         vehicle = _assignable_vehicle(data["assigned_vehicle_id"], user, db)
+    # Moving the driver off a truck clears that truck's operator text if it was them.
+    if "assigned_vehicle_id" in data and d.assigned_vehicle_id is not None \
+            and d.assigned_vehicle_id != data["assigned_vehicle_id"]:
+        prev = db.get(Vehicle, d.assigned_vehicle_id)
+        if prev is not None and (prev.operator_name or "").strip().lower() == d.name.strip().lower():
+            prev.operator_name = None
     for k, val in data.items():
         setattr(d, k, val)
     if vehicle is not None:
