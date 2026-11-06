@@ -7,10 +7,16 @@ import { useCallback, useEffect, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/badges";
 import { Loader } from "@/components/Loader";
-import { api } from "@/lib/api";
+import {
+  LOAN_FOOTNOTE,
+  LoanScheduleTable,
+  LoanSummary,
+  loanTermsLine,
+  type LoanDetail,
+} from "@/components/LoanSchedule";
+import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
-  EXPENSE_LABELS,
   fmtUsd,
   type BusinessListItem,
   type Defect,
@@ -31,7 +37,93 @@ interface ShopOptions {
   options: BusinessListItem[];
 }
 
-type Tab = "overview" | "maintenance" | "defects" | "docs" | "costs" | "history";
+type Tab = "overview" | "maintenance" | "defects" | "docs" | "loan" | "history";
+
+/* Loan schedule tab: the truck's financing and full amortization table. */
+function LoanTab({ vehicleId }: { vehicleId: string }) {
+  const [loan, setLoan] = useState<LoanDetail | null>(null);
+  const [none, setNone] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState("");
+
+  useEffect(() => {
+    api<LoanDetail>(`/api/fleet/vehicles/${vehicleId}/loan`)
+      .then(setLoan)
+      .catch((e) => {
+        if (e instanceof ApiError && e.status === 404) setNone(true);
+        else setErr(e instanceof Error ? e.message : "Failed to load");
+      });
+  }, [vehicleId]);
+
+  async function download(format: "pdf" | "xlsx") {
+    setBusy(format);
+    setErr(null);
+    try {
+      const res = await fetch(
+        `${DOCS_API_URL}/api/fleet/reports/loan?vehicle_id=${vehicleId}&format=${format}`,
+        { headers: docsAuth() },
+      );
+      if (!res.ok) throw new Error(`Download failed (${res.status})`);
+      const blob = await res.blob();
+      const name = res.headers.get("content-disposition")?.match(/filename="([^"]+)"/)?.[1]
+        ?? `loan-schedule.${format}`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Download failed");
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (err && !loan) return <p className="card p-5 text-sm font-medium text-danger">{err}</p>;
+  if (none) {
+    return (
+      <section className="card p-5">
+        <h2 className="text-lg font-bold">Loan schedule</h2>
+        <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-8 text-center text-sm text-steel">
+          No loan on this truck — it&apos;s owned outright, or the financing hasn&apos;t been added yet.
+          <Link href={`/loans/${vehicleId}?edit=1`} className="btn ml-3 !py-1.5 text-xs">Add loan</Link>
+        </p>
+      </section>
+    );
+  }
+  if (!loan) return <Loader />;
+
+  return (
+    <section className="card p-0">
+      <div className="p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-bold">Loan schedule · {loan.lender}</h2>
+            <p className="mt-0.5 text-sm text-steel">{loanTermsLine(loan)}</p>
+          </div>
+          <div className="flex gap-2">
+            <button className="btn-quiet !py-1.5 text-xs" disabled={busy !== ""}
+                    onClick={() => void download("pdf")}>
+              {busy === "pdf" ? "…" : "PDF"}
+            </button>
+            <button className="btn-quiet !py-1.5 text-xs" disabled={busy !== ""}
+                    onClick={() => void download("xlsx")}>
+              {busy === "xlsx" ? "…" : "Excel"}
+            </button>
+            <Link href={`/loans/${vehicleId}?edit=1`} className="btn-quiet !py-1.5 text-xs">Edit loan</Link>
+          </div>
+        </div>
+        {err && <p className="mt-2 text-sm font-medium text-danger">{err}</p>}
+        <div className="mt-4"><LoanSummary loan={loan} /></div>
+      </div>
+      <div className="border-t border-line"><LoanScheduleTable loan={loan} maxHeight={420} /></div>
+      <p className="border-t border-line px-5 py-3 text-xs text-faint">{LOAN_FOOTNOTE}</p>
+    </section>
+  );
+}
 
 /* Contract for /api/fleet/vehicles/{id}/documents. */
 interface VehicleDoc {
@@ -442,8 +534,6 @@ function VehicleInner() {
   const [odo, setOdo] = useState("");
   const [schedOpen, setSchedOpen] = useState(false);
   const [schedForm, setSchedForm] = useState({ title: "", miles: "", months: "" });
-  const [expOpen, setExpOpen] = useState(false);
-  const [expForm, setExpForm] = useState({ category: "repair", description: "", amount: "" });
   const [defOpen, setDefOpen] = useState(false);
   const [defForm, setDefForm] = useState({ type: "", comment: "" });
   const [options, setOptions] = useState<Record<string, ShopOptions | "loading">>({});
@@ -513,7 +603,7 @@ function VehicleInner() {
     ["maintenance", "Maintenance", dueCount || null],
     ["defects", "PTI defects", openDefects || null],
     ["docs", "Documents", null],
-    ["costs", "Costs", v.expenses_total_cents ? fmtUsd(v.expenses_total_cents) : null],
+    ["loan", "Loan schedule", null],
     ["history", "History", d.bookings.length || null],
   ];
 
@@ -856,115 +946,7 @@ function VehicleInner() {
 
         {tab === "docs" && <DocumentsSection vehicleId={id} />}
 
-        {tab === "costs" && (
-          <section className="card p-5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <h2 className="text-lg font-bold">Cost ledger</h2>
-                <p className="mt-0.5 text-sm text-steel">
-                  Completed marketplace repairs land here automatically.
-                </p>
-              </div>
-              <div className="flex items-center gap-3">
-                <span className="display text-xl font-bold">{fmtUsd(v.expenses_total_cents)}</span>
-                <button className="btn !py-2 text-sm" onClick={() => setExpOpen(!expOpen)}>
-                  {expOpen ? "Close" : "+ Add expense"}
-                </button>
-              </div>
-            </div>
-            {Object.keys(d.expenses_by_category).length > 0 && (
-              <div className="mt-3 flex flex-wrap gap-2">
-                {Object.entries(d.expenses_by_category).map(([cat, cents]) => (
-                  <span key={cat} className="rounded-full bg-mist px-3 py-1 text-sm">
-                    {EXPENSE_LABELS[cat] ?? cat}: <strong>{fmtUsd(cents)}</strong>
-                  </span>
-                ))}
-              </div>
-            )}
-            {expOpen && (
-              <form
-                className="mt-4 grid gap-3 rounded-lg border border-dashed border-line bg-mist/50 p-4 sm:grid-cols-[150px_1fr_130px_auto]"
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  void post(`/api/fleet/vehicles/${v.id}/expenses`, {
-                    category: expForm.category,
-                    description: expForm.description,
-                    amount_cents: Math.round(Number(expForm.amount) * 100),
-                    odometer_miles: v.odometer_miles,
-                  });
-                  setExpForm({ category: "repair", description: "", amount: "" });
-                  setExpOpen(false);
-                }}
-              >
-                <div>
-                  <label className="text-sm font-medium text-steel" htmlFor="ex-c">Category</label>
-                  <select id="ex-c" className="field mt-1" value={expForm.category}
-                          onChange={(e) => setExpForm({ ...expForm, category: e.target.value })}>
-                    {Object.entries(EXPENSE_LABELS).map(([val, label]) => (
-                      <option key={val} value={val}>{label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-steel" htmlFor="ex-d">Description</label>
-                  <input id="ex-d" required className="field mt-1" placeholder="What was it? (receipt line)"
-                         value={expForm.description}
-                         onChange={(e) => setExpForm({ ...expForm, description: e.target.value })} />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-steel" htmlFor="ex-a">Amount ($)</label>
-                  <input id="ex-a" required className="field mt-1" inputMode="decimal" placeholder="450.00"
-                         value={expForm.amount}
-                         onChange={(e) => setExpForm({ ...expForm, amount: e.target.value })} />
-                </div>
-                <button className="btn self-end !py-2.5">Add</button>
-              </form>
-            )}
-            {d.expenses.length === 0 ? (
-              <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-6 text-center text-sm text-steel">
-                No costs recorded yet.
-              </p>
-            ) : (
-              <div className="mt-4 overflow-x-auto">
-                <table className="w-full border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-line text-left text-steel">
-                      <th className="py-2 pr-3 font-medium">Date</th>
-                      <th className="py-2 pr-3 font-medium">Category</th>
-                      <th className="py-2 pr-3 font-medium">Description</th>
-                      <th className="py-2 pr-3 font-medium">Odometer</th>
-                      <th className="py-2 text-right font-medium">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {d.expenses.map((e) => (
-                      <tr key={e.id} className="border-b border-line/60 transition-colors hover:bg-mist/60">
-                        <td className="py-2.5 pr-3 text-steel">{new Date(e.incurred_at).toLocaleDateString()}</td>
-                        <td className="py-2.5 pr-3">
-                          <span className="rounded-full bg-mist px-2 py-0.5 text-xs font-medium">
-                            {EXPENSE_LABELS[e.category] ?? e.category}
-                          </span>
-                        </td>
-                        <td className="py-2.5 pr-3">
-                          {e.description}
-                          {e.booking_id && (
-                            <Link href={`/bookings/${e.booking_id}`} className="ml-1.5 text-xs font-medium text-pine hover:underline">
-                              booking
-                            </Link>
-                          )}
-                        </td>
-                        <td className="py-2.5 pr-3 text-steel">
-                          {e.odometer_miles != null ? `${Math.round(e.odometer_miles).toLocaleString()} mi` : "—"}
-                        </td>
-                        <td className="py-2.5 text-right font-semibold tabular-nums">{fmtUsd(e.amount_cents)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        )}
+        {tab === "loan" && <LoanTab vehicleId={id} />}
 
         {tab === "history" && (
           <section className="card p-5">
