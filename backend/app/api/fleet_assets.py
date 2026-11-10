@@ -17,7 +17,7 @@ from app.api.fleet import fleet_user
 from app.api.work_orders import _media_dir, _sniff
 from app.db import get_db
 from app.models import (
-    FleetDriver, Trailer, TrailerStatus, User, Vehicle, VehicleDocument, utcnow,
+    FleetDriver, InventoryItem, Trailer, TrailerStatus, User, Vehicle, VehicleDocument, utcnow,
 )
 
 router = APIRouter(prefix="/api/fleet", tags=["fleet"])
@@ -322,6 +322,10 @@ def delete_driver(driver_id: uuid.UUID, user: User = Depends(fleet_user),
         return
     if d.owner_user_id != user.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Driver not found")
+    # Equipment the driver held goes back to the warehouse.
+    for item in db.execute(select(InventoryItem).where(InventoryItem.driver_id == d.id)).scalars():
+        item.location_kind, item.driver_id = "warehouse", None
+    db.flush()
     db.delete(d)
     db.commit()
 

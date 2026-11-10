@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api import (
     admin, auth, bookings, businesses, claims, fleet, fleet_assets,
-    fleet_finance, fleet_ops, fleet_reports, me, offers, reviews, work_orders,
+    fleet_finance, fleet_ops, fleet_reports, inventory, me, offers, reviews, work_orders,
 )
 from app.config import get_settings
 
@@ -46,7 +46,7 @@ async def public_cache_headers(request: Request, call_next):
 for router in (auth.router, businesses.router, claims.router, offers.router,
                bookings.router, reviews.router, me.router, fleet.router,
                fleet_assets.router, fleet_finance.router, fleet_ops.router,
-               fleet_reports.router, work_orders.router, admin.router):
+               fleet_reports.router, work_orders.router, inventory.router, admin.router):
     app.include_router(router)
 
 _media = Path(settings.media_dir)

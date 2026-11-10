@@ -666,6 +666,62 @@ class WorkOrderAttachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+# ---------------------------------------------------------------- inventory
+
+class InventoryItem(Base):
+    """Fleet equipment on hand: tablets, ELDs, snow chains, toll transponders.
+
+    One row is a quantity of one thing at one place — the warehouse, a truck
+    or a driver. Moving part of a row splits it; moving onto an identical row
+    at the destination merges into it.
+    """
+
+    __tablename__ = "inventory_items"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    name: Mapped[str] = mapped_column(String(128))
+    item_type: Mapped[str] = mapped_column(String(32), default="other")
+    reference: Mapped[str | None] = mapped_column(String(128))
+    mc_number: Mapped[str | None] = mapped_column(String(128))   # carrier / MC the item belongs to
+    amount_cents: Mapped[int] = mapped_column(Integer)           # price per unit
+    quantity: Mapped[int] = mapped_column(Integer)
+    location_kind: Mapped[str] = mapped_column(String(16), default="warehouse")  # warehouse|vehicle|driver
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("fleet_drivers.id"), index=True)
+    note: Mapped[str | None] = mapped_column(Text)
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow
+    )
+
+    __table_args__ = (
+        CheckConstraint("amount_cents >= 0", name="ck_inventory_amount"),
+        CheckConstraint("quantity >= 0", name="ck_inventory_quantity"),
+        CheckConstraint(
+            "(location_kind = 'warehouse' AND vehicle_id IS NULL AND driver_id IS NULL)"
+            " OR (location_kind = 'vehicle' AND vehicle_id IS NOT NULL AND driver_id IS NULL)"
+            " OR (location_kind = 'driver' AND driver_id IS NOT NULL AND vehicle_id IS NULL)",
+            name="ck_inventory_location",
+        ),
+    )
+
+
+class InventoryDocument(Base):
+    """Receipt, contract or photo attached to an inventory item (auth-only download)."""
+
+    __tablename__ = "inventory_documents"
+
+    id: Mapped[uuid.UUID] = pk()
+    item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("inventory_items.id"), index=True)
+    filename: Mapped[str] = mapped_column(String(64))
+    original_name: Mapped[str | None] = mapped_column(String(255))
+    content_type: Mapped[str | None] = mapped_column(String(64))
+    uploaded_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 # ---------------------------------------------------------------- import provenance
 
 class ImportBatch(Base):
