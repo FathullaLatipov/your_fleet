@@ -213,6 +213,7 @@ export interface Vehicle {
   mc_number: string | null;
   operator_name: string | null;
   ownership: string | null;
+  owner_name: string | null;
   trailer_unit: string | null;
   dispatch_status: string | null;
   tags: string | null;

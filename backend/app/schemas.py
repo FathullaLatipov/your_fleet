@@ -374,6 +374,7 @@ class _VehicleFields(BaseModel):
     mc_number: str | None = Field(default=None, max_length=64)
     operator_name: str | None = Field(default=None, max_length=128)
     ownership: str | None = Field(default=None, max_length=32)
+    owner_name: str | None = Field(default=None, max_length=128)
     trailer_unit: str | None = Field(default=None, max_length=32)
     dispatch_status: str | None = Field(default=None, max_length=32)
     tags: str | None = Field(default=None, max_length=255)
@@ -413,6 +414,7 @@ class VehicleOut(ORMModel):
     mc_number: str | None
     operator_name: str | None
     ownership: str | None
+    owner_name: str | None
     trailer_unit: str | None
     dispatch_status: str | None
     tags: str | None

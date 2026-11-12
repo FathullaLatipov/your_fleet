@@ -80,6 +80,11 @@ class TrailerIn(BaseModel):
     ownership: str | None = Field(default=None, pattern="^(owned|leased)$")
     lease_cents_monthly: int | None = Field(default=None, ge=0)
     tires_condition: str | None = Field(default=None, pattern="^(good|fair|replace_soon)$")
+    make: str | None = Field(default=None, max_length=64)
+    model: str | None = Field(default=None, max_length=64)
+    mc_number: str | None = Field(default=None, max_length=64)
+    dispatch_status: str | None = Field(default=None, max_length=32)
+    fleet_status: str | None = Field(default=None, max_length=64)
     notes: str | None = None
 
     @field_validator("vin")
@@ -102,6 +107,11 @@ class TrailerUpdateIn(BaseModel):
     ownership: str | None = Field(default=None, pattern="^(owned|leased)$")
     lease_cents_monthly: int | None = Field(default=None, ge=0)
     tires_condition: str | None = Field(default=None, pattern="^(good|fair|replace_soon)$")
+    make: str | None = Field(default=None, max_length=64)
+    model: str | None = Field(default=None, max_length=64)
+    mc_number: str | None = Field(default=None, max_length=64)
+    dispatch_status: str | None = Field(default=None, max_length=32)
+    fleet_status: str | None = Field(default=None, max_length=64)
     notes: str | None = None
 
     @field_validator("vin")
@@ -132,6 +142,11 @@ def _trailer_out(t: Trailer, units: dict[uuid.UUID, str]) -> dict:
         "ownership": t.ownership,
         "lease_cents_monthly": t.lease_cents_monthly,
         "tires_condition": t.tires_condition,
+        "make": t.make,
+        "model": t.model,
+        "mc_number": t.mc_number,
+        "dispatch_status": t.dispatch_status,
+        "fleet_status": t.fleet_status,
         "notes": t.notes,
         "warnings": trailer_warnings(t),
     }

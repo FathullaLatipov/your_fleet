@@ -435,7 +435,7 @@ function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () 
 
   const rows: [string, string | null][] = [
     ["Operator (driver)", v.operator_name],
-    ["Ownership", v.ownership],
+    ["Ownership", [v.ownership, v.owner_name].filter(Boolean).join(" · ") || null],
     ["MC / carrier", v.mc_number],
     ["Plate", [v.license_plate, v.state].filter(Boolean).join(" · ") || null],
     ["Trailer", v.trailer_unit],

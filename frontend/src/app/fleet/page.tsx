@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { ImportDialog } from "@/components/ImportDialog";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -26,6 +27,7 @@ function FleetInner() {
   const { user, loading } = useAuth();
   const [vehicles, setVehicles] = useState<Vehicle[] | null>(null);
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [form, setForm] = useState({
     unit_number: "", make: "", model: "", year: "", vin: "", odometer: "",
     plate: "", state: "", driver: "", ownership: "", mc: "",
@@ -100,10 +102,16 @@ function FleetInner() {
           Trucks, maintenance schedules, repair costs. Odometer updates automatically
           when Samsara is connected.
         </p>
-        <button className="btn" onClick={() => setShowAdd(!showAdd)}>
-          {showAdd ? "Close" : "Add truck"}
-        </button>
+        <div className="flex gap-2">
+          <button className="btn-quiet" onClick={() => setShowImport(true)}>Import from Excel</button>
+          <button className="btn" onClick={() => setShowAdd(!showAdd)}>
+            {showAdd ? "Close" : "Add truck"}
+          </button>
+        </div>
       </div>
+      {showImport && (
+        <ImportDialog kind="trucks" onClose={() => setShowImport(false)} onImported={load} />
+      )}
 
       {showAdd && (
         <form onSubmit={addVehicle} className="mt-5 grid gap-3 card p-5 sm:grid-cols-3">

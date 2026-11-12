@@ -261,6 +261,7 @@ class Vehicle(Base):
     mc_number: Mapped[str | None] = mapped_column(String(64))      # carrier MC / authority
     operator_name: Mapped[str | None] = mapped_column(String(128)) # assigned driver
     ownership: Mapped[str | None] = mapped_column(String(32))      # Owner / Owner-operator / Leased
+    owner_name: Mapped[str | None] = mapped_column(String(128))    # owner-operator / leasing company
     trailer_unit: Mapped[str | None] = mapped_column(String(32))   # attached trailer unit #
     dispatch_status: Mapped[str | None] = mapped_column(String(32))  # available / in_transit / parked
     tags: Mapped[str | None] = mapped_column(String(255))
@@ -383,6 +384,11 @@ class Trailer(Base):
     owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     unit_number: Mapped[str] = mapped_column(String(32))
     trailer_type: Mapped[str | None] = mapped_column(String(32))  # dry_van/reefer/flatbed/...
+    make: Mapped[str | None] = mapped_column(String(64))
+    model: Mapped[str | None] = mapped_column(String(64))
+    mc_number: Mapped[str | None] = mapped_column(String(64))
+    dispatch_status: Mapped[str | None] = mapped_column(String(32))  # loaded / empty / in_transit ...
+    fleet_status: Mapped[str | None] = mapped_column(String(64))     # free text from the TMS
     year: Mapped[int | None] = mapped_column(Integer)
     vin: Mapped[str | None] = mapped_column(String(17))
     license_plate: Mapped[str | None] = mapped_column(String(32))

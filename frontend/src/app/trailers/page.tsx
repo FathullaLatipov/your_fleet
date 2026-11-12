@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { ImportDialog } from "@/components/ImportDialog";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -24,6 +25,11 @@ interface Trailer {
   ownership: "owned" | "leased" | null;
   lease_cents_monthly: number | null;
   tires_condition: "good" | "fair" | "replace_soon" | null;
+  make: string | null;
+  model: string | null;
+  mc_number: string | null;
+  dispatch_status: string | null;
+  fleet_status: string | null;
   notes: string | null;
   warnings: string[];
 }
@@ -262,8 +268,10 @@ function TrailerRow({
 
   const [sLabel, sCls] = STATUS_BADGE[t.status] ?? STATUS_BADGE.active;
   const idLine = [
+    [t.make, t.model].filter(Boolean).join(" "),
     t.year, t.vin && `VIN ${t.vin}`,
     [t.license_plate, t.state].filter(Boolean).join(" · "),
+    t.mc_number,
   ].filter(Boolean).join(" · ");
 
   return (
@@ -275,6 +283,16 @@ function TrailerRow({
           <p className="mt-0.5 text-sm text-steel">{idLine || "—"}</p>
         </div>
         <span className={`rounded px-2 py-0.5 text-xs font-semibold ${sCls}`}>{sLabel}</span>
+        {t.dispatch_status && (
+          <span className="rounded bg-mist px-2 py-0.5 text-xs font-semibold text-steel">
+            {t.dispatch_status.replace(/_/g, " ")}
+          </span>
+        )}
+        {t.fleet_status && (
+          <span className="rounded bg-mist px-2 py-0.5 text-xs text-steel" title="Fleet status">
+            {t.fleet_status}
+          </span>
+        )}
         {t.ownership === "leased" && (
           <span className="rounded bg-mist px-2 py-0.5 text-xs font-semibold text-steel">
             Leased{t.lease_cents_monthly != null && ` · $${Math.round(t.lease_cents_monthly / 100).toLocaleString()}/mo`}
@@ -328,6 +346,7 @@ function TrailersInner() {
   const [error, setError] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [form, setForm] = useState<TrailerForm>(emptyForm);
   const [busy, setBusy] = useState(false);
 
@@ -400,10 +419,18 @@ function TrailersInner() {
               and which truck each one is hooked to.
             </p>
           </div>
-          <button className="btn !py-2 text-sm" onClick={() => setAddOpen(!addOpen)}>
-            {addOpen ? "Close" : "+ Add trailer"}
-          </button>
+          <div className="flex gap-2">
+            <button className="btn-quiet !py-2 text-sm" onClick={() => setShowImport(true)}>
+              Import from Excel
+            </button>
+            <button className="btn !py-2 text-sm" onClick={() => setAddOpen(!addOpen)}>
+              {addOpen ? "Close" : "+ Add trailer"}
+            </button>
+          </div>
         </div>
+        {showImport && (
+          <ImportDialog kind="trailers" onClose={() => setShowImport(false)} onImported={load} />
+        )}
 
         {addOpen && (
           <form onSubmit={addTrailer}
