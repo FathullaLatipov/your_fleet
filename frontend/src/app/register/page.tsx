@@ -11,7 +11,9 @@ function RegisterInner() {
   const params = useSearchParams();
   const router = useRouter();
   const { refresh } = useAuth();
-  const [role, setRole] = useState(params.get("role") === "provider" ? "provider" : "driver");
+  // Sign-up is for fleet managers. Repair shops arrive from the "For shops"
+  // pages with ?role=provider; there is no on-page role picker.
+  const role = params.get("role") === "provider" ? "provider" : "fleet_manager";
   const [fullName, setFullName] = useState("");
   const [carrierName, setCarrierName] = useState("");
   const [dotNumber, setDotNumber] = useState("");
@@ -46,8 +48,7 @@ function RegisterInner() {
         method: "POST",
         body: {
           email, password, full_name: fullName, phone: phone || null, role,
-          carrier_name:
-            role === "fleet_manager" || role === "driver" ? carrierName.trim() || null : null,
+          carrier_name: role === "fleet_manager" ? carrierName.trim() || null : null,
           dot_number: role === "fleet_manager" ? dotNumber.trim() || null : null,
         },
       });
@@ -132,25 +133,14 @@ function RegisterInner() {
 
   return (
     <div className="mx-auto max-w-sm px-4 py-16">
-      <h1 className="text-2xl font-bold">Create an account</h1>
+      <h1 className="text-2xl font-bold">
+        {role === "provider" ? "Create a shop account" : "Create an account"}
+      </h1>
       <form onSubmit={submit} className="mt-6 space-y-4">
-        <fieldset>
-          <legend className="text-sm font-medium text-steel">I am a…</legend>
-          <div className="mt-1 grid grid-cols-3 gap-2">
-            {([["driver", "Driver"], ["provider", "Repair shop"], ["fleet_manager", "Fleet manager"]] as const).map(([v, label]) => (
-              <label key={v} className={`cursor-pointer rounded border px-2 py-2 text-center text-sm font-medium ${role === v ? "border-pine bg-pine-wash text-pine" : "border-line"}`}>
-                <input type="radio" name="role" className="sr-only" checked={role === v} onChange={() => setRole(v)} />
-                {label}
-              </label>
-            ))}
-          </div>
-        </fieldset>
-        {(role === "fleet_manager" || role === "driver") && (
+        {role === "fleet_manager" && (
           <div>
-            <label className="text-sm font-medium text-steel" htmlFor="carrier">
-              Carrier name{role === "driver" && <span className="text-faint"> (optional)</span>}
-            </label>
-            <input id="carrier" required={role === "fleet_manager"} className="field mt-1"
+            <label className="text-sm font-medium text-steel" htmlFor="carrier">Carrier name</label>
+            <input id="carrier" required className="field mt-1"
                    placeholder="VKL TRUCKING INC"
                    value={carrierName} onChange={(e) => setCarrierName(e.target.value)}
                    autoComplete="organization" />
@@ -165,7 +155,7 @@ function RegisterInner() {
         )}
         <div>
           <label className="text-sm font-medium text-steel" htmlFor="name">
-            {role === "provider" ? "Contact name" : role === "fleet_manager" ? "Your full name" : "Full name"}
+            {role === "provider" ? "Contact name" : "Your full name"}
           </label>
           <input id="name" required className="field mt-1" value={fullName}
                  onChange={(e) => setFullName(e.target.value)} autoComplete="name" />
