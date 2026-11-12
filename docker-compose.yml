@@ -48,6 +48,32 @@ services:
     volumes:
       - yourfleet_media:/app/media
 
+  # Keeps odometer / GPS / DVIR defects in step with Samsara for one fleet
+  # account. Idles until SAMSARA_API_TOKEN and SAMSARA_SYNC_OWNER are set.
+  samsara-sync:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "app.cli", "samsara-loop", "--create-missing",
+              "--interval", "${SAMSARA_SYNC_INTERVAL:-900}"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://yourfleet:${YF_DB_PASSWORD}@db:5432/yourfleet
+      JWT_SECRET: ${YF_JWT_SECRET:?set YF_JWT_SECRET in .env}
+      SAMSARA_API_TOKEN: ${SAMSARA_API_TOKEN:-}
+      SAMSARA_SYNC_OWNER: ${SAMSARA_SYNC_OWNER:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM:-YourFleet <onboarding@resend.dev>}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      FRONTEND_URL: ${FRONTEND_URL:-https://your-fleet.vercel.app}
+      ENVIRONMENT: production
+
 volumes:
   yourfleet_pgdata:
   yourfleet_media:

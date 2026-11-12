@@ -222,6 +222,55 @@ class TestSamsaraSync:
         )
         assert report.vehicles_matched == 0 and report.unmatched
 
+    def test_matches_by_unit_name_when_no_vin(self, client, db):
+        u, h = fleet_user(client, db, "sam-unit@example.com")
+        add_vehicle(client, h, unit="4300")  # no VIN on our side
+        report = sync_samsara(
+            db, u,
+            vehicles_fn=lambda: [SamsaraVehicle(id="sam-9", name="4300", vin="3AKJHHDR9MSMF4300")],
+            stats_fn=lambda: [], defects_fn=lambda: [], create_missing=True,
+        )
+        # Matched instead of a duplicate-unit insert; VIN filled in from Samsara
+        assert (report.vehicles_matched, report.vehicles_created) == (1, 0)
+        v = db.execute(select(Vehicle).where(Vehicle.owner_user_id == u.id)).scalar_one()
+        assert v.samsara_vehicle_id == "sam-9" and v.vin == "3AKJHHDR9MSMF4300"
+
+    def test_defects_license_error_keeps_odometer(self, client, db):
+        import httpx
+
+        u, h = fleet_user(client, db, "sam-403@example.com")
+        add_vehicle(client, h, unit="S2", vin="1XKAD49X1KJ211826")
+
+        def no_license():
+            req = httpx.Request("GET", "https://api.samsara.com/fleet/defects/history")
+            resp = httpx.Response(403, json={"message": "No access to required licenses."}, request=req)
+            raise httpx.HTTPStatusError("403", request=req, response=resp)
+
+        report = sync_samsara(
+            db, u,
+            vehicles_fn=lambda: [SamsaraVehicle(id="sam-2", name="S2", vin="1XKAD49X1KJ211826")],
+            stats_fn=lambda: [SamsaraStats(vehicle_id="sam-2", odometer_meters=1_609_344,
+                                           lat=41.0, lng=-87.0, located_at=None)],
+            defects_fn=no_license,
+        )
+        assert report.odometers_updated == 1
+        assert "HTTP 403" in report.defects_note and "licenses" in report.defects_note
+        db.expire_all()
+        v = db.execute(select(Vehicle).where(Vehicle.vin == "1XKAD49X1KJ211826")).scalar_one()
+        assert round(v.odometer_miles) == 1000  # committed despite the defects error
+
+    def test_dry_run_writes_nothing(self, client, db):
+        u, _ = fleet_user(client, db, "sam-dry@example.com")
+        report = sync_samsara(
+            db, u,
+            vehicles_fn=lambda: [SamsaraVehicle(id="n1", name="101", vin=None),
+                                 SamsaraVehicle(id="n2", name="102", vin=None)],
+            stats_fn=lambda: [], defects_fn=lambda: [],
+            create_missing=True, dry_run=True,
+        )
+        assert report.vehicles_created == 2 and report.created_units == ["101", "102"]
+        assert db.execute(select(Vehicle).where(Vehicle.owner_user_id == u.id)).first() is None
+
 
 class TestMondayExport:
     def test_export_builds_items(self, client, db):

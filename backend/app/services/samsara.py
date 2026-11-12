@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable
 
 import httpx
@@ -99,11 +99,21 @@ class SamsaraClient:
         return out
 
     def open_defects(self) -> list[SamsaraDefect]:
-        rows = self._paged("/fleet/defects", {"isResolved": "false", "limit": 512})
+        # /fleet/defects/history carries the defect type as a readable label
+        # (the newer /defects/stream only has a type id). Window max 30 days.
+        # Needs the "Read Defects" scope and a Samsara license that includes DVIRs.
+        now = datetime.now(timezone.utc)
+        fmt = "%Y-%m-%dT%H:%M:%SZ"
+        rows = self._paged("/fleet/defects/history", {
+            "startTime": (now - timedelta(days=30)).strftime(fmt),
+            "endTime": now.strftime(fmt),
+            "isResolved": "false",
+            "limit": 512,
+        })
         out = []
         for r in rows:
             vehicle = r.get("vehicle") or {}
-            dtype = (r.get("defectType") or {})
+            dtype = r.get("defectType") or "other"
             out.append(SamsaraDefect(
                 id=str(r["id"]),
                 vehicle_id=str(vehicle.get("id", "")),
@@ -121,10 +131,14 @@ class SyncReport:
     odometers_updated: int = 0
     defects_created: int = 0
     maintenance_notifications: int = 0
+    defects_note: str | None = None
+    dry_run: bool = False
+    created_units: list[str] = field(default_factory=list)
     unmatched: list[str] = field(default_factory=list)
 
     def as_dict(self) -> dict:
-        return self.__dict__ | {"unmatched": self.unmatched[:20]}
+        return self.__dict__ | {"unmatched": self.unmatched[:20],
+                                "created_units": self.created_units[:50]}
 
 
 def sync_samsara(
@@ -135,31 +149,42 @@ def sync_samsara(
     stats_fn: Callable[[], list[SamsaraStats]],
     defects_fn: Callable[[], list[SamsaraDefect]],
     create_missing: bool = False,
+    dry_run: bool = False,
 ) -> SyncReport:
-    report = SyncReport()
+    """Match Samsara vehicles to the owner's trucks (Samsara id, then VIN,
+    then unit number = Samsara name), update odometer/GPS, add open DVIR
+    defects. dry_run reports what would change and writes / notifies nothing."""
+    report = SyncReport(dry_run=dry_run)
     ours = db.execute(
         select(Vehicle).where(Vehicle.owner_user_id == owner.id)
     ).scalars().all()
     by_samsara_id = {v.samsara_vehicle_id: v for v in ours if v.samsara_vehicle_id}
     by_vin = {v.vin.upper(): v for v in ours if v.vin}
+    by_unit = {v.unit_number.strip().lower(): v for v in ours}
 
     for sv in vehicles_fn():
-        v = by_samsara_id.get(sv.id) or (by_vin.get(sv.vin.upper()) if sv.vin else None)
+        v = (by_samsara_id.get(sv.id)
+             or (by_vin.get(sv.vin.upper()) if sv.vin else None)
+             or (by_unit.get(sv.name.strip().lower()) if sv.name else None))
         if v is None:
             if create_missing:
+                unit = (sv.name or sv.id)[:32]
                 v = Vehicle(
-                    owner_user_id=owner.id,
-                    unit_number=(sv.name or sv.id)[:32],
+                    owner_user_id=owner.id, unit_number=unit,
                     name=sv.name, vin=sv.vin, samsara_vehicle_id=sv.id,
                 )
                 db.add(v)
                 db.flush()
+                by_unit[unit.strip().lower()] = v
                 report.vehicles_created += 1
+                report.created_units.append(unit)
             else:
                 report.unmatched.append(f"{sv.name or sv.id} (vin={sv.vin or '—'})")
                 continue
         else:
             v.samsara_vehicle_id = sv.id
+            if sv.vin and not v.vin:
+                v.vin = sv.vin
             report.vehicles_matched += 1
         by_samsara_id[sv.id] = v
 
@@ -175,13 +200,27 @@ def sync_samsara(
         if st.lat is not None:
             v.last_lat, v.last_lng = st.lat, st.lng
             v.last_location_at = st.located_at or utcnow()
-        report.maintenance_notifications += check_vehicle_maintenance(db, v)
+        if not dry_run:  # sends notifications / emails
+            report.maintenance_notifications += check_vehicle_maintenance(db, v)
+
+    # Defects are optional: a plan without the DVIR license (403) or a token
+    # without "Read Defects" must not cost the odometer/GPS update.
+    try:
+        defects = defects_fn()
+    except httpx.HTTPStatusError as e:
+        defects = []
+        code = e.response.status_code
+        try:
+            msg = e.response.json().get("message", "")
+        except ValueError:
+            msg = ""
+        report.defects_note = f"DVIR defects not available (HTTP {code}{': ' + msg if msg else ''})"
 
     existing_defects = set(db.execute(
         select(InspectionDefect.samsara_defect_id)
         .where(InspectionDefect.samsara_defect_id.isnot(None))
     ).scalars())
-    for d in defects_fn():
+    for d in defects:
         if d.resolved or d.id in existing_defects:
             continue
         v = by_samsara_id.get(d.vehicle_id)
@@ -191,12 +230,16 @@ def sync_samsara(
             vehicle_id=v.id, source="samsara_dvir", samsara_defect_id=d.id,
             defect_type=d.defect_type[:64], comment=d.comment,
         ))
-        notify(db, owner.id, "defect.detected",
-               f"PTI defect on unit {v.unit_number}: {d.defect_type}",
-               d.comment, {"vehicle_id": str(v.id)})
+        if not dry_run:
+            notify(db, owner.id, "defect.detected",
+                   f"PTI defect on unit {v.unit_number}: {d.defect_type}",
+                   d.comment, {"vehicle_id": str(v.id)})
         report.defects_created += 1
 
-    db.commit()
+    if dry_run:
+        db.rollback()
+    else:
+        db.commit()
     return report
 
 

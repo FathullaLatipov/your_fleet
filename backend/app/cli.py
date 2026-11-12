@@ -99,9 +99,50 @@ def cmd_sync_samsara(args: argparse.Namespace) -> int:
             vehicles_fn=sclient.vehicles, stats_fn=sclient.stats,
             defects_fn=sclient.open_defects,
             create_missing=args.create_missing,
+            dry_run=args.dry_run,
         )
     print(json.dumps(report.as_dict(), indent=2))
     return 0
+
+
+def cmd_samsara_loop(args: argparse.Namespace) -> int:
+    """Keep odometer/GPS fresh: sync SAMSARA_SYNC_OWNER every --interval seconds.
+
+    Idles (instead of crash-looping the container) while the token or the
+    owner isn't configured, so the service can ship before it's switched on.
+    """
+    import os
+    import time
+    from datetime import datetime, timezone
+
+    from app.services.samsara import make_client, sync_samsara
+
+    owner_email = (args.owner_email or os.environ.get("SAMSARA_SYNC_OWNER", "")).strip()
+    sclient = None
+    while True:
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        if not owner_email:
+            print(f"[{stamp}] samsara-loop idle: SAMSARA_SYNC_OWNER is not set", flush=True)
+        else:
+            try:
+                sclient = sclient or make_client()
+                with SessionLocal() as db:
+                    owner = _find_user(db, owner_email)
+                    if owner is not None:
+                        report = sync_samsara(
+                            db, owner,
+                            vehicles_fn=sclient.vehicles, stats_fn=sclient.stats,
+                            defects_fn=sclient.open_defects,
+                            create_missing=args.create_missing,
+                        )
+                        d = report.as_dict()
+                        print(f"[{stamp}] samsara sync {owner_email}: matched={d['vehicles_matched']} "
+                              f"created={d['vehicles_created']} odometers={d['odometers_updated']} "
+                              f"defects={d['defects_created']}"
+                              + (f" note={d['defects_note']}" if d["defects_note"] else ""), flush=True)
+            except Exception as e:  # noqa: BLE001 - keep the loop alive, log the cause
+                print(f"[{stamp}] samsara sync failed: {type(e).__name__}: {e}", flush=True)
+        time.sleep(args.interval)
 
 
 def cmd_monday_export(args: argparse.Namespace) -> int:
@@ -252,7 +293,18 @@ def main() -> int:
                      help="Fleet account the Samsara org belongs to")
     p_s.add_argument("--create-missing", action="store_true",
                      help="Create vehicles that exist in Samsara but not here")
+    p_s.add_argument("--dry-run", action="store_true",
+                     help="Report what would change; write and notify nothing")
     p_s.set_defaults(func=cmd_sync_samsara)
+
+    p_sl = sub.add_parser("samsara-loop",
+                          help="Sync SAMSARA_SYNC_OWNER every --interval seconds (service)")
+    p_sl.add_argument("--owner-email", default=None,
+                      help="Overrides SAMSARA_SYNC_OWNER")
+    p_sl.add_argument("--interval", type=int, default=900)
+    p_sl.add_argument("--create-missing", action="store_true",
+                      help="Create vehicles that exist in Samsara but not here")
+    p_sl.set_defaults(func=cmd_samsara_loop)
 
     p_m = sub.add_parser("monday-export",
                          help="Export fleet expenses to a monday.com board (needs MONDAY_API_TOKEN)")
