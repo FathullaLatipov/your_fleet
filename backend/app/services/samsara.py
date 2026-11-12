@@ -9,6 +9,7 @@ first run — tenant configs vary.
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Callable
@@ -18,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import InspectionDefect, User, Vehicle, utcnow
+from app.services.fleet_links import link_operator
 from app.services.maintenance import check_vehicle_maintenance
 from app.services.notifications import notify
 
@@ -124,6 +126,19 @@ class SamsaraClient:
         return out
 
 
+_UNIT_AND_DRIVER = re.compile(r"^\s*(\d[\w\-/]*)\s+([A-Za-z].*?)\s*$")
+
+
+def split_vehicle_name(name: str) -> tuple[str, str | None]:
+    """Carriers often name a Samsara vehicle "<unit> <driver>":
+    "043 AZIZBEK ABDUGAFUROV" -> ("043", "AZIZBEK ABDUGAFUROV").
+    Anything else (a bare number, a gateway serial) is the unit as is."""
+    m = _UNIT_AND_DRIVER.match(name or "")
+    if m:
+        return m.group(1), m.group(2)
+    return (name or "").strip(), None
+
+
 @dataclass
 class SyncReport:
     vehicles_matched: int = 0
@@ -163,26 +178,33 @@ def sync_samsara(
     by_unit = {v.unit_number.strip().lower(): v for v in ours}
 
     for sv in vehicles_fn():
+        unit, driver = split_vehicle_name(sv.name or sv.id)
         v = (by_samsara_id.get(sv.id)
              or (by_vin.get(sv.vin.upper()) if sv.vin else None)
-             or (by_unit.get(sv.name.strip().lower()) if sv.name else None))
+             or (by_unit.get(sv.name.strip().lower()) if sv.name else None)
+             or by_unit.get(unit.lower()))
         if v is None:
             if create_missing:
-                unit = (sv.name or sv.id)[:32]
                 v = Vehicle(
-                    owner_user_id=owner.id, unit_number=unit,
+                    owner_user_id=owner.id, unit_number=unit[:32],
                     name=sv.name, vin=sv.vin, samsara_vehicle_id=sv.id,
+                    operator_name=driver,
                 )
                 db.add(v)
                 db.flush()
-                by_unit[unit.strip().lower()] = v
+                if driver:
+                    link_operator(db, v, None)
+                by_unit[v.unit_number.strip().lower()] = v
+                if sv.vin:
+                    by_vin[sv.vin.upper()] = v
                 report.vehicles_created += 1
-                report.created_units.append(unit)
+                report.created_units.append(v.unit_number + (f" ({driver})" if driver else ""))
             else:
                 report.unmatched.append(f"{sv.name or sv.id} (vin={sv.vin or '—'})")
                 continue
         else:
-            v.samsara_vehicle_id = sv.id
+            if v.samsara_vehicle_id is None:
+                v.samsara_vehicle_id = sv.id
             if sv.vin and not v.vin:
                 v.vin = sv.vin
             report.vehicles_matched += 1
@@ -192,6 +214,15 @@ def sync_samsara(
         v = by_samsara_id.get(st.vehicle_id)
         if v is None:
             continue
+        # Several Samsara records can point at one truck (a replaced gateway
+        # keeps its old record). Never let an older reading overwrite a newer one.
+        last = v.last_location_at
+        if last is not None and last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        if st.located_at is not None and last is not None and st.located_at < last:
+            continue
+        if st.located_at is not None:
+            v.samsara_vehicle_id = st.vehicle_id  # follow the device that reports now
         if st.odometer_meters is not None:
             v.odometer_miles = round(st.odometer_meters / METERS_PER_MILE, 1)
             v.odometer_updated_at = utcnow()

@@ -259,6 +259,41 @@ class TestSamsaraSync:
         v = db.execute(select(Vehicle).where(Vehicle.vin == "1XKAD49X1KJ211826")).scalar_one()
         assert round(v.odometer_miles) == 1000  # committed despite the defects error
 
+    def test_unit_and_driver_names_and_stale_duplicate(self, client, db):
+        from datetime import datetime, timezone
+
+        from app.models import FleetDriver
+        from app.services.samsara import split_vehicle_name
+
+        assert split_vehicle_name("043 AZIZBEK ABDUGAFUROV") == ("043", "AZIZBEK ABDUGAFUROV")
+        assert split_vehicle_name("105") == ("105", None)
+        assert split_vehicle_name("GZA4-ZRV-MZA") == ("GZA4-ZRV-MZA", None)
+
+        old = datetime(2026, 5, 21, 16, 35, tzinfo=timezone.utc)
+        new = datetime(2026, 11, 12, 18, 50, tzinfo=timezone.utc)
+        vin = "1XKYD49X0RJ442871"
+        for order in ("fresh-first", "stale-first"):
+            u, _ = fleet_user(client, db, f"sam-dup-{order}@example.com")
+            fresh = SamsaraStats(vehicle_id="new-gw", odometer_meters=160_934_400,  # 100k mi
+                                 lat=41.0, lng=-87.0, located_at=new)
+            stale = SamsaraStats(vehicle_id="old-gw", odometer_meters=80_467_200,   # 50k mi
+                                 lat=30.0, lng=-90.0, located_at=old)
+            report = sync_samsara(
+                db, u,
+                vehicles_fn=lambda: [SamsaraVehicle(id="old-gw", name="07 KYLE TRICE", vin=vin),
+                                     SamsaraVehicle(id="new-gw", name="07 KYLE TRICE", vin=vin)],
+                stats_fn=lambda: [fresh, stale] if order == "fresh-first" else [stale, fresh],
+                defects_fn=lambda: [], create_missing=True,
+            )
+            # One truck, unit "07", driver linked, readings from the live device
+            assert (report.vehicles_created, report.vehicles_matched) == (1, 1), order
+            v = db.execute(select(Vehicle).where(Vehicle.owner_user_id == u.id)).scalar_one()
+            assert (v.unit_number, v.operator_name) == ("07", "KYLE TRICE")
+            assert round(v.odometer_miles) == 100_000 and v.last_lat == 41.0, order
+            assert v.samsara_vehicle_id == "new-gw", order
+            d = db.execute(select(FleetDriver).where(FleetDriver.owner_user_id == u.id)).scalar_one()
+            assert d.name == "KYLE TRICE" and d.assigned_vehicle_id == v.id
+
     def test_dry_run_writes_nothing(self, client, db):
         u, _ = fleet_user(client, db, "sam-dry@example.com")
         report = sync_samsara(
