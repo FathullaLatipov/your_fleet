@@ -323,7 +323,6 @@ export function AppShell({ title, children }: { title: string; children: React.R
         { href: "/ai-dispatch", label: "AI Dispatch", icon: "bot", soon: true },
         { href: "/reports", label: "Reports", icon: "report" },
         { href: "/fuel", label: "Fuel", icon: "fuel" },
-        { href: "/faults", label: "Fault codes", icon: "alert" },
         { href: "/toll", label: "Toll", icon: "toll", soon: true },
         { href: "/inventory", label: "Inventory", icon: "box" },
         { href: "/track", label: "Live map", icon: "map" },
