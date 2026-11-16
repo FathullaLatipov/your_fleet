@@ -97,7 +97,7 @@ function FuelInner() {
           Odometer, fuel level and engine hours straight from Samsara. Updates every 15 minutes.
         </p>
         <Link href="/faults" className="btn-quiet !py-2 text-sm">
-          Engine faults{s.trucks_with_faults > 0 && (
+          Fault codes{s.trucks_with_faults > 0 && (
             <span className="ml-1.5 rounded bg-danger-wash px-1.5 text-xs font-bold text-danger">
               {s.trucks_with_faults}
             </span>

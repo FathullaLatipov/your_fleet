@@ -125,3 +125,40 @@ class TestTelematics:
         hp = login(client, "tel-prov@example.com")
         assert client.get("/api/fleet/fuel", headers=hp).status_code == 403
         assert client.get("/api/fleet/faults", headers=hp).status_code == 403
+
+
+class TestStatsParsing:
+    """Guard the client's raw-response parsing: the request type is plural
+    ("fuelPercents") but Samsara's response field is singular ("fuelPercent").
+    Reading the wrong key silently drops fuel for every truck (regression)."""
+
+    def test_stats_reads_fuel_gps_odometer_hours(self):
+        from app.services.samsara import SamsaraClient
+
+        c = SamsaraClient("test-token")
+        raw = [{
+            "id": "281475000312418",
+            "name": "07 KYLE TRICE",
+            "gps": {"latitude": 43.07, "longitude": -89.4, "time": "2026-11-16T20:25:20Z",
+                    "headingDegrees": 270, "speedMilesPerHour": 61},
+            "obdOdometerMeters": {"value": 1_152_000_000},
+            "fuelPercent": {"time": "2026-11-16T20:25:20Z", "value": 30},
+            "obdEngineSeconds": {"value": 101_483_820},
+        }]
+        c._paged = lambda *a, **k: raw  # type: ignore[assignment]
+        [s] = c.stats()
+        assert s.fuel_percent == 30           # the bug read "fuelPercents" -> None
+        assert s.odometer_meters == 1_152_000_000
+        assert s.engine_seconds == 101_483_820
+        assert s.heading == 270 and s.speed_mph == 61
+        assert s.lat == 43.07 and s.lng == -89.4
+        assert s.located_at is not None and s.located_at.year == 2026
+
+    def test_stats_missing_fuel_field_is_none(self):
+        from app.services.samsara import SamsaraClient
+
+        c = SamsaraClient("test-token")
+        c._paged = lambda *a, **k: [{"id": "x", "name": "02",
+                                     "gps": {"latitude": 1.0, "longitude": 2.0}}]  # type: ignore[assignment]
+        [s] = c.stats()
+        assert s.fuel_percent is None and s.odometer_meters is None

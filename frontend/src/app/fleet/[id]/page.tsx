@@ -57,12 +57,12 @@ function FaultsTab({ vehicleId, onCount }: { vehicleId: string; onCount: (n: num
   return (
     <section className="card p-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-bold">Engine faults</h2>
+        <h2 className="text-lg font-bold">Fault codes</h2>
         <span className="text-sm text-steel">from Samsara · J1939 diagnostic codes</span>
       </div>
       {data.active.length === 0 ? (
         <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-8 text-center text-sm text-steel">
-          No active engine faults.
+          No active fault codes.
         </p>
       ) : (
         <div className="mt-4 space-y-3">
@@ -668,7 +668,7 @@ function VehicleInner() {
     ["maintenance", "Maintenance", dueCount || null],
     ["defects", "PTI defects", openDefects || null],
     ["docs", "Documents", null],
-    ["faults", "Engine faults", faultCount || null],
+    ["faults", "Fault codes", faultCount || null],
     ["loan", "Loan schedule", null],
     ["history", "History", d.bookings.length || null],
   ];

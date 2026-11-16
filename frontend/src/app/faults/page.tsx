@@ -49,7 +49,7 @@ function FaultsInner() {
         <div className="mt-6"><Loader /></div>
       ) : faults.length === 0 ? (
         <p className="mt-6 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-12 text-center text-sm text-steel">
-          {active ? "No active engine faults. 🎉" : "No fault history yet."}
+          {active ? "No active fault codes. 🎉" : "No fault history yet."}
         </p>
       ) : (
         <div className="mt-5 space-y-3">
@@ -72,7 +72,7 @@ function FaultsInner() {
 
 export default function FaultsPage() {
   return (
-    <AppShell title="Engine faults">
+    <AppShell title="Fault codes">
       <FaultsInner />
     </AppShell>
   );

@@ -114,7 +114,8 @@ class SamsaraClient:
         for r in rows:
             gps = r.get("gps") or {}
             odo = r.get("obdOdometerMeters") or {}
-            fuel = r.get("fuelPercents") or {}
+            # Request type is "fuelPercents"; the response field is singular.
+            fuel = r.get("fuelPercent") or {}
             hours = r.get("obdEngineSeconds") or {}
             ts = gps.get("time")
             out.append(SamsaraStats(
