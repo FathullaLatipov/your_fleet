@@ -326,7 +326,8 @@ export function AppShell({ title, children }: { title: string; children: React.R
         { href: "/faults", label: "Engine faults", icon: "alert" },
         { href: "/toll", label: "Toll", icon: "toll", soon: true },
         { href: "/inventory", label: "Inventory", icon: "box" },
-        { href: "/map", label: "Map", icon: "map" },
+        { href: "/track", label: "Live map", icon: "map" },
+        { href: "/map", label: "Find repair", icon: "search" },
       ],
     },
   ];

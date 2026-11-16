@@ -181,10 +181,10 @@ function FuelInner() {
                     </td>
                     <td className="px-3 py-2.5">
                       {i.last_lat != null ? (
-                        <a className="text-pine hover:underline" target="_blank" rel="noopener noreferrer"
-                           href={`https://www.google.com/maps/search/?api=1&query=${i.last_lat},${i.last_lng}`}>
+                        <Link className="text-pine hover:underline" target="_blank"
+                              href={`/track?truck=${i.id}`}>
                           map
-                        </a>
+                        </Link>
                       ) : <span className="text-faint">—</span>}
                     </td>
                     <td className="px-3 py-2.5">

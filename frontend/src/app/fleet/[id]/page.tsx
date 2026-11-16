@@ -698,10 +698,9 @@ function VehicleInner() {
               {v.last_location_at && v.last_lat != null && (
                 <>
                   {" · "}
-                  <a className="text-pine hover:underline" target="_blank" rel="noopener noreferrer"
-                     href={`https://www.google.com/maps/search/?api=1&query=${v.last_lat},${v.last_lng}`}>
+                  <Link className="text-pine hover:underline" target="_blank" href={`/track?truck=${id}`}>
                     last seen on the map
-                  </a>
+                  </Link>
                 </>
               )}
             </p>
