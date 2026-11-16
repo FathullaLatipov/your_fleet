@@ -63,6 +63,28 @@ class TestTelematics:
         assert client.get("/api/fleet/faults", headers=h).json() == []  # active-only default
         assert len(client.get("/api/fleet/faults?active=false", headers=h).json()) == 1
 
+    def test_duplicate_device_same_fault_is_deduped(self, client, db):
+        # One truck, two Samsara gateways, both report the same code in one run.
+        u, h = fleet_user(client, db, "tel-dup@example.com")
+        add_vehicle(client, h, unit="07", vin="1XKYD49X0RJ442871")
+        both = [SamsaraVehicle(id="old", name="07", vin="1XKYD49X0RJ442871"),
+                SamsaraVehicle(id="new", name="07", vin="1XKYD49X0RJ442871")]
+        faults = [
+            SamsaraFault(vehicle_id="old", protocol="j1939", spn=639, fmi=2, tx_id=11,
+                         source_name="Body Controller", spn_description="Net", fmi_description="Erratic",
+                         occurrence_count=120, mil_status=0, check_engine_light=False),
+            SamsaraFault(vehicle_id="new", protocol="j1939", spn=639, fmi=2, tx_id=11,
+                         source_name="Body Controller", spn_description="Net", fmi_description="Erratic",
+                         occurrence_count=126, mil_status=0, check_engine_light=True),
+        ]
+        report = sync_samsara(db, u, vehicles_fn=lambda: both, stats_fn=lambda: [],
+                              defects_fn=lambda: [], faults_fn=lambda: faults)
+        assert report.faults_active == 1  # merged, not two rows / no crash
+        v = db.execute(select(Vehicle).where(Vehicle.owner_user_id == u.id)).scalar_one()
+        active = client.get(f"/api/fleet/vehicles/{v.id}/faults", headers=h).json()["active"]
+        assert len(active) == 1
+        assert active[0]["occurrence_count"] == 126 and active[0]["check_engine_light"] is True
+
     def test_missing_fuel_stays_null_not_faked(self, client, db):
         u, h = fleet_user(client, db, "tel3@example.com")
         add_vehicle(client, h, unit="02", vin="1XKYD49X0RJ442871")

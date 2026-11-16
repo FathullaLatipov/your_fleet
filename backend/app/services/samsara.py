@@ -377,24 +377,33 @@ def _sync_faults(
     by_key = {(f.vehicle_id, f.protocol, f.spn, f.fmi, f.tx_id): f for f in existing}
 
     now = utcnow()
-    seen: set = set()
+    # A truck can have two Samsara devices (a replaced gateway) both reporting
+    # the same code in one reading, so de-dupe by key within this run and keep
+    # the highest occurrence count.
+    handled: dict = {}  # key -> VehicleEngineFault added/updated this run
     for sf in faults:
         v = by_samsara_id.get(sf.vehicle_id)
         if v is None:
             continue
         key = (v.id, sf.protocol, sf.spn, sf.fmi, sf.tx_id)
-        seen.add(key)
-        row = by_key.get(key)
+        row = handled.get(key) or by_key.get(key)
         if row is None:
-            db.add(VehicleEngineFault(
+            row = VehicleEngineFault(
                 vehicle_id=v.id, protocol=sf.protocol, spn=sf.spn, fmi=sf.fmi,
                 tx_id=sf.tx_id, source_name=sf.source_name,
                 spn_description=sf.spn_description, fmi_description=sf.fmi_description,
                 occurrence_count=sf.occurrence_count, mil_status=sf.mil_status,
                 check_engine_light=sf.check_engine_light,
                 first_seen_at=now, last_seen_at=now, is_active=True,
-            ))
+            )
+            db.add(row)
+            handled[key] = row
             report.faults_active += 1
+        elif key in handled:
+            # Second device, same fault this run: keep the worst count, don't re-add.
+            if (sf.occurrence_count or 0) > (row.occurrence_count or 0):
+                row.occurrence_count = sf.occurrence_count
+            row.check_engine_light = row.check_engine_light or sf.check_engine_light
         else:
             row.last_seen_at = now
             row.occurrence_count = sf.occurrence_count
@@ -402,10 +411,13 @@ def _sync_faults(
             row.check_engine_light = sf.check_engine_light
             row.spn_description = sf.spn_description or row.spn_description
             row.fmi_description = sf.fmi_description or row.fmi_description
+            row.is_active = True
+            row.cleared_at = None
+            handled[key] = row
             report.faults_active += 1
 
     for key, row in by_key.items():
-        if key not in seen:
+        if key not in handled:
             row.is_active = False
             row.cleared_at = now
             report.faults_cleared += 1
