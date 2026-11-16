@@ -1,0 +1,105 @@
+"""Samsara fuel, engine hours and engine fault codes: sync + read endpoints."""
+from app.models import UserRole, Vehicle
+from app.services.samsara import SamsaraFault, SamsaraStats, SamsaraVehicle, sync_samsara
+from sqlalchemy import select
+from tests.test_api import client, login, make_user  # noqa: F401
+from tests.test_fleet import add_vehicle, fleet_user
+
+
+def dtc(spn, fmi, tx, count, spn_desc="Primary Vehicle Network", fmi_desc="Erratic"):
+    return SamsaraFault(vehicle_id="sam-1", protocol="j1939", spn=spn, fmi=fmi, tx_id=tx,
+                        source_name="Body Controller", spn_description=spn_desc,
+                        fmi_description=fmi_desc, occurrence_count=count, mil_status=0,
+                        check_engine_light=True)
+
+
+class TestTelematics:
+    def test_fuel_hours_and_faults_sync_and_read(self, client, db):
+        u, h = fleet_user(client, db, "tel1@example.com")
+        add_vehicle(client, h, unit="01", vin="4V4NC9EH1KN214702")
+        stats = SamsaraStats(vehicle_id="sam-1", odometer_meters=1_153_000_000,
+                             lat=43.0, lng=-89.0, located_at=None,
+                             fuel_percent=100, engine_seconds=101_483_820)
+        report = sync_samsara(
+            db, u,
+            vehicles_fn=lambda: [SamsaraVehicle(id="sam-1", name="01", vin="4V4NC9EH1KN214702")],
+            stats_fn=lambda: [stats], defects_fn=lambda: [],
+            faults_fn=lambda: [dtc(639, 2, 11, 126), dtc(520761, 5, 33, 12)],
+        )
+        assert report.fuel_updated == 1 and report.engine_hours_updated == 1
+        assert report.faults_active == 2
+
+        fuel = client.get("/api/fleet/fuel", headers=h).json()
+        assert fuel["summary"] == {"trucks": 1, "connected": 1, "reporting_fuel": 1,
+                                   "avg_fuel_percent": 100.0, "trucks_with_faults": 1}
+        it = fuel["items"][0]
+        assert it["fuel_percent"] == 100 and it["active_faults"] == 2
+        assert round(it["engine_hours"]) == 28190  # 101,483,820 s / 3600
+        assert it["connected"] is True and round(it["odometer_miles"]) == 716_441
+
+        v = db.execute(select(Vehicle).where(Vehicle.owner_user_id == u.id)).scalar_one()
+        vf = client.get(f"/api/fleet/vehicles/{v.id}/faults", headers=h).json()
+        assert len(vf["active"]) == 2 and vf["cleared"] == []
+        f = next(x for x in vf["active"] if x["spn"] == 639)
+        assert f["fmi"] == 2 and f["occurrence_count"] == 126 and f["check_engine_light"] is True
+        assert f["source_name"] == "Body Controller"
+
+        faults = client.get("/api/fleet/faults", headers=h).json()
+        assert len(faults) == 2 and faults[0]["unit_number"] == "01"
+
+    def test_fault_clears_when_gone(self, client, db):
+        u, h = fleet_user(client, db, "tel2@example.com")
+        add_vehicle(client, h, unit="01", vin="4V4NC9EH1KN214702")
+        args = dict(
+            vehicles_fn=lambda: [SamsaraVehicle(id="sam-1", name="01", vin="4V4NC9EH1KN214702")],
+            stats_fn=lambda: [], defects_fn=lambda: [])
+        sync_samsara(db, u, faults_fn=lambda: [dtc(639, 2, 11, 10)], **args)
+        # Next reading: fault gone -> cleared, count unchanged for the 639 row
+        report = sync_samsara(db, u, faults_fn=lambda: [], **args)
+        assert report.faults_cleared == 1 and report.faults_active == 0
+        v = db.execute(select(Vehicle).where(Vehicle.owner_user_id == u.id)).scalar_one()
+        vf = client.get(f"/api/fleet/vehicles/{v.id}/faults", headers=h).json()
+        assert vf["active"] == [] and len(vf["cleared"]) == 1
+        assert client.get("/api/fleet/faults", headers=h).json() == []  # active-only default
+        assert len(client.get("/api/fleet/faults?active=false", headers=h).json()) == 1
+
+    def test_missing_fuel_stays_null_not_faked(self, client, db):
+        u, h = fleet_user(client, db, "tel3@example.com")
+        add_vehicle(client, h, unit="02", vin="1XKYD49X0RJ442871")
+        sync_samsara(
+            db, u,
+            vehicles_fn=lambda: [SamsaraVehicle(id="s2", name="02", vin="1XKYD49X0RJ442871")],
+            stats_fn=lambda: [SamsaraStats(vehicle_id="s2", odometer_meters=1_000_000,
+                                           lat=1.0, lng=2.0, located_at=None,
+                                           fuel_percent=None, engine_seconds=None)],
+            defects_fn=lambda: [], faults_fn=lambda: [])
+        it = client.get("/api/fleet/fuel", headers=h).json()["items"][0]
+        assert it["fuel_percent"] is None and it["engine_hours"] is None
+        assert it["odometer_miles"] is not None  # odometer still came through
+
+    def test_faults_license_error_doesnt_break_sync(self, client, db):
+        import httpx
+
+        u, h = fleet_user(client, db, "tel4@example.com")
+        add_vehicle(client, h, unit="03", vin="1XKAD49X1KJ211825")
+
+        def no_license():
+            req = httpx.Request("GET", "https://api.samsara.com/fleet/vehicles/stats")
+            resp = httpx.Response(403, json={"message": "No access to required licenses."},
+                                  request=req)
+            raise httpx.HTTPStatusError("403", request=req, response=resp)
+
+        report = sync_samsara(
+            db, u,
+            vehicles_fn=lambda: [SamsaraVehicle(id="s3", name="03", vin="1XKAD49X1KJ211825")],
+            stats_fn=lambda: [SamsaraStats(vehicle_id="s3", odometer_meters=1_609_344,
+                                           lat=1.0, lng=2.0, located_at=None)],
+            defects_fn=lambda: [], faults_fn=no_license)
+        assert report.odometers_updated == 1
+        assert report.faults_note and "403" in report.faults_note
+
+    def test_rbac(self, client, db):
+        make_user(db, "tel-prov@example.com", role=UserRole.PROVIDER)
+        hp = login(client, "tel-prov@example.com")
+        assert client.get("/api/fleet/fuel", headers=hp).status_code == 403
+        assert client.get("/api/fleet/faults", headers=hp).status_code == 403

@@ -18,7 +18,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import InspectionDefect, User, Vehicle, utcnow
+from app.models import InspectionDefect, User, Vehicle, VehicleEngineFault, utcnow
 from app.services.fleet_links import link_operator
 from app.services.maintenance import check_vehicle_maintenance
 from app.services.notifications import notify
@@ -41,6 +41,8 @@ class SamsaraStats:
     lat: float | None
     lng: float | None
     located_at: datetime | None
+    fuel_percent: float | None = None
+    engine_seconds: float | None = None
 
 
 @dataclass
@@ -50,6 +52,22 @@ class SamsaraDefect:
     defect_type: str
     comment: str | None
     resolved: bool
+
+
+@dataclass
+class SamsaraFault:
+    """One J1939 (or OBD-II) engine fault code reported by a vehicle."""
+    vehicle_id: str
+    protocol: str
+    spn: int | None
+    fmi: int | None
+    tx_id: int | None
+    source_name: str | None
+    spn_description: str | None
+    fmi_description: str | None
+    occurrence_count: int | None
+    mil_status: int | None
+    check_engine_light: bool
 
 
 class SamsaraClient:
@@ -85,19 +103,58 @@ class SamsaraClient:
                 for r in rows]
 
     def stats(self) -> list[SamsaraStats]:
+        # Samsara caps a stats call at 4 types. Fuel/engine-hours come back
+        # only for gateways that report them (null otherwise — never faked).
         rows = self._paged("/fleet/vehicles/stats",
-                           {"types": "gps,obdOdometerMeters", "limit": 512})
+                           {"types": "gps,obdOdometerMeters,fuelPercents,obdEngineSeconds",
+                            "limit": 512})
         out = []
         for r in rows:
             gps = r.get("gps") or {}
             odo = r.get("obdOdometerMeters") or {}
+            fuel = r.get("fuelPercents") or {}
+            hours = r.get("obdEngineSeconds") or {}
             ts = gps.get("time")
             out.append(SamsaraStats(
                 vehicle_id=str(r["id"]),
                 odometer_meters=odo.get("value"),
                 lat=gps.get("latitude"), lng=gps.get("longitude"),
                 located_at=datetime.fromisoformat(ts.replace("Z", "+00:00")) if ts else None,
+                fuel_percent=fuel.get("value"),
+                engine_seconds=hours.get("value"),
             ))
+        return out
+
+    def faults(self) -> list[SamsaraFault]:
+        """Current engine fault codes (J1939 SPN/FMI, and OBD-II if present)."""
+        rows = self._paged("/fleet/vehicles/stats", {"types": "faultCodes", "limit": 512})
+        out: list[SamsaraFault] = []
+        for r in rows:
+            fc = r.get("faultCodes") or {}
+            vid = str(r["id"])
+            j = fc.get("j1939") or {}
+            cel = bool(j.get("checkEngineLights"))
+            for d in (j.get("diagnosticTroubleCodes") or []):
+                out.append(SamsaraFault(
+                    vehicle_id=vid, protocol="j1939",
+                    spn=d.get("spnId"), fmi=d.get("fmiId"), tx_id=d.get("txId"),
+                    source_name=d.get("sourceAddressName"),
+                    spn_description=d.get("spnDescription"),
+                    fmi_description=d.get("fmiDescription"),
+                    occurrence_count=d.get("occurrenceCount"),
+                    mil_status=d.get("milStatus"),
+                    check_engine_light=cel,
+                ))
+            obd = fc.get("obdii") or {}
+            for d in (obd.get("diagnosticTroubleCodes") or []):
+                out.append(SamsaraFault(
+                    vehicle_id=vid, protocol="obdii",
+                    spn=None, fmi=None, tx_id=None, source_name=None,
+                    spn_description=d.get("dtcDescription") or d.get("dtcShortCode"),
+                    fmi_description=d.get("dtcShortCode"),
+                    occurrence_count=None, mil_status=None,
+                    check_engine_light=bool(obd.get("checkEngineLightIsOn")),
+                ))
         return out
 
     def open_defects(self) -> list[SamsaraDefect]:
@@ -146,7 +203,12 @@ class SyncReport:
     odometers_updated: int = 0
     defects_created: int = 0
     maintenance_notifications: int = 0
+    fuel_updated: int = 0
+    engine_hours_updated: int = 0
+    faults_active: int = 0
+    faults_cleared: int = 0
     defects_note: str | None = None
+    faults_note: str | None = None
     dry_run: bool = False
     created_units: list[str] = field(default_factory=list)
     unmatched: list[str] = field(default_factory=list)
@@ -163,6 +225,7 @@ def sync_samsara(
     vehicles_fn: Callable[[], list[SamsaraVehicle]],
     stats_fn: Callable[[], list[SamsaraStats]],
     defects_fn: Callable[[], list[SamsaraDefect]],
+    faults_fn: Callable[[], list[SamsaraFault]] | None = None,
     create_missing: bool = False,
     dry_run: bool = False,
 ) -> SyncReport:
@@ -228,6 +291,14 @@ def sync_samsara(
             v.odometer_updated_at = utcnow()
             v.odometer_source = "samsara"
             report.odometers_updated += 1
+        if st.fuel_percent is not None:
+            v.fuel_percent = float(st.fuel_percent)
+            v.fuel_updated_at = utcnow()
+            report.fuel_updated += 1
+        if st.engine_seconds is not None:
+            v.engine_hours = round(st.engine_seconds / 3600, 1)
+            v.engine_hours_updated_at = utcnow()
+            report.engine_hours_updated += 1
         if st.lat is not None:
             v.last_lat, v.last_lng = st.lat, st.lng
             v.last_location_at = st.located_at or utcnow()
@@ -267,11 +338,77 @@ def sync_samsara(
                    d.comment, {"vehicle_id": str(v.id)})
         report.defects_created += 1
 
+    # Engine fault codes (J1939 SPN/FMI). The latest reading is the full set of
+    # active faults; upsert those and clear any our rows no longer report.
+    if faults_fn is not None:
+        _sync_faults(db, by_samsara_id, faults_fn, report)
+
     if dry_run:
         db.rollback()
     else:
         db.commit()
     return report
+
+
+def _sync_faults(
+    db: Session,
+    by_samsara_id: dict,
+    faults_fn: Callable[[], list[SamsaraFault]],
+    report: SyncReport,
+) -> None:
+    try:
+        faults = faults_fn()
+    except httpx.HTTPStatusError as e:
+        code = e.response.status_code
+        try:
+            msg = e.response.json().get("message", "")
+        except ValueError:
+            msg = ""
+        report.faults_note = f"Fault codes not available (HTTP {code}{': ' + msg if msg else ''})"
+        return
+
+    our_vehicle_ids = {v.id for v in by_samsara_id.values()}
+    existing = db.execute(
+        select(VehicleEngineFault).where(
+            VehicleEngineFault.vehicle_id.in_(our_vehicle_ids or {None}),
+            VehicleEngineFault.is_active.is_(True),
+        )
+    ).scalars().all()
+    by_key = {(f.vehicle_id, f.protocol, f.spn, f.fmi, f.tx_id): f for f in existing}
+
+    now = utcnow()
+    seen: set = set()
+    for sf in faults:
+        v = by_samsara_id.get(sf.vehicle_id)
+        if v is None:
+            continue
+        key = (v.id, sf.protocol, sf.spn, sf.fmi, sf.tx_id)
+        seen.add(key)
+        row = by_key.get(key)
+        if row is None:
+            db.add(VehicleEngineFault(
+                vehicle_id=v.id, protocol=sf.protocol, spn=sf.spn, fmi=sf.fmi,
+                tx_id=sf.tx_id, source_name=sf.source_name,
+                spn_description=sf.spn_description, fmi_description=sf.fmi_description,
+                occurrence_count=sf.occurrence_count, mil_status=sf.mil_status,
+                check_engine_light=sf.check_engine_light,
+                first_seen_at=now, last_seen_at=now, is_active=True,
+            ))
+            report.faults_active += 1
+        else:
+            row.last_seen_at = now
+            row.occurrence_count = sf.occurrence_count
+            row.mil_status = sf.mil_status
+            row.check_engine_light = sf.check_engine_light
+            row.spn_description = sf.spn_description or row.spn_description
+            row.fmi_description = sf.fmi_description or row.fmi_description
+            report.faults_active += 1
+
+    for key, row in by_key.items():
+        if key not in seen:
+            row.is_active = False
+            row.cleared_at = now
+            report.faults_cleared += 1
 
 
 def make_client() -> SamsaraClient:

@@ -97,7 +97,7 @@ def cmd_sync_samsara(args: argparse.Namespace) -> int:
         report = sync_samsara(
             db, owner,
             vehicles_fn=sclient.vehicles, stats_fn=sclient.stats,
-            defects_fn=sclient.open_defects,
+            defects_fn=sclient.open_defects, faults_fn=sclient.faults,
             create_missing=args.create_missing,
             dry_run=args.dry_run,
         )
@@ -132,12 +132,14 @@ def cmd_samsara_loop(args: argparse.Namespace) -> int:
                         report = sync_samsara(
                             db, owner,
                             vehicles_fn=sclient.vehicles, stats_fn=sclient.stats,
-                            defects_fn=sclient.open_defects,
+                            defects_fn=sclient.open_defects, faults_fn=sclient.faults,
                             create_missing=args.create_missing,
                         )
                         d = report.as_dict()
                         print(f"[{stamp}] samsara sync {owner_email}: matched={d['vehicles_matched']} "
                               f"created={d['vehicles_created']} odometers={d['odometers_updated']} "
+                              f"fuel={d['fuel_updated']} engine_hours={d['engine_hours_updated']} "
+                              f"faults_active={d['faults_active']} faults_cleared={d['faults_cleared']} "
                               f"defects={d['defects_created']}"
                               + (f" note={d['defects_note']}" if d["defects_note"] else ""), flush=True)
             except Exception as e:  # noqa: BLE001 - keep the loop alive, log the cause

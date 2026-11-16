@@ -274,6 +274,11 @@ class Vehicle(Base):
     odometer_miles: Mapped[float | None] = mapped_column(Float)
     odometer_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     odometer_source: Mapped[str | None] = mapped_column(String(16))  # manual | samsara
+    # Telematics readings from Samsara (null = not reported by the gateway).
+    fuel_percent: Mapped[float | None] = mapped_column(Float)
+    fuel_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    engine_hours: Mapped[float | None] = mapped_column(Float)
+    engine_hours_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     samsara_vehicle_id: Mapped[str | None] = mapped_column(String(64), index=True)
     last_lat: Mapped[float | None] = mapped_column(Float)
     last_lng: Mapped[float | None] = mapped_column(Float)
@@ -282,6 +287,37 @@ class Vehicle(Base):
 
     __table_args__ = (
         UniqueConstraint("owner_user_id", "unit_number", name="uq_vehicle_unit"),
+    )
+
+
+class VehicleEngineFault(Base):
+    """A J1939 engine fault code from Samsara (SPN/FMI). Active ones are
+    upserted each sync; a fault missing from the latest reading is cleared.
+    Keyed per vehicle by (spn, fmi, source address) so a flapping fault keeps
+    one row with a running occurrence count."""
+
+    __tablename__ = "vehicle_engine_faults"
+
+    id: Mapped[uuid.UUID] = pk()
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("vehicles.id"), index=True)
+    protocol: Mapped[str] = mapped_column(String(16), default="j1939")  # j1939 | obdii
+    spn: Mapped[int | None] = mapped_column(Integer)
+    fmi: Mapped[int | None] = mapped_column(Integer)
+    tx_id: Mapped[int | None] = mapped_column(Integer)          # J1939 source address id
+    source_name: Mapped[str | None] = mapped_column(String(128))  # e.g. "Body Controller"
+    spn_description: Mapped[str | None] = mapped_column(String(255))
+    fmi_description: Mapped[str | None] = mapped_column(String(255))
+    occurrence_count: Mapped[int | None] = mapped_column(Integer)
+    mil_status: Mapped[int | None] = mapped_column(Integer)     # malfunction indicator lamp
+    check_engine_light: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    cleared_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        UniqueConstraint("vehicle_id", "protocol", "spn", "fmi", "tx_id",
+                         name="uq_engine_fault"),
     )
 
 

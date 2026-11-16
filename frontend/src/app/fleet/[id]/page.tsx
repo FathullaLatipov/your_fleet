@@ -1,11 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/badges";
+import { EngineFault, FaultRow } from "@/components/FaultCard";
 import { Loader } from "@/components/Loader";
 import {
   LOAN_FOOTNOTE,
@@ -37,7 +38,59 @@ interface ShopOptions {
   options: BusinessListItem[];
 }
 
-type Tab = "overview" | "maintenance" | "defects" | "docs" | "loan" | "history";
+type Tab = "overview" | "maintenance" | "defects" | "docs" | "faults" | "loan" | "history";
+
+/* Engine fault codes from Samsara for one truck (Active + recently cleared). */
+function FaultsTab({ vehicleId, onCount }: { vehicleId: string; onCount: (n: number) => void }) {
+  const [data, setData] = useState<{ active: EngineFault[]; cleared: EngineFault[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    api<{ active: EngineFault[]; cleared: EngineFault[] }>(`/api/fleet/vehicles/${vehicleId}/faults`)
+      .then((d) => { setData(d); onCount(d.active.length); })
+      .catch((e) => setErr(e instanceof Error ? e.message : "Failed to load"));
+  }, [vehicleId, onCount]);
+
+  if (err) return <p className="card p-5 text-sm font-medium text-danger">{err}</p>;
+  if (!data) return <Loader />;
+
+  return (
+    <section className="card p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-lg font-bold">Engine faults</h2>
+        <span className="text-sm text-steel">from Samsara · J1939 diagnostic codes</span>
+      </div>
+      {data.active.length === 0 ? (
+        <p className="mt-4 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-8 text-center text-sm text-steel">
+          No active engine faults.
+        </p>
+      ) : (
+        <div className="mt-4 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-danger">
+            Active ({data.active.length})
+          </p>
+          {data.active.map((f) => (
+            <div key={f.id} className="rounded-lg border border-danger/30 bg-danger-wash/40 p-3.5">
+              <FaultRow f={f} />
+            </div>
+          ))}
+        </div>
+      )}
+      {data.cleared.length > 0 && (
+        <div className="mt-5 space-y-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-steel">
+            Recently cleared ({data.cleared.length})
+          </p>
+          {data.cleared.map((f) => (
+            <div key={f.id} className="rounded-lg border border-line p-3.5 opacity-70">
+              <FaultRow f={f} />
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
 
 /* Loan schedule tab: the truck's financing and full amortization table. */
 function LoanTab({ vehicleId }: { vehicleId: string }) {
@@ -530,7 +583,11 @@ function VehicleInner() {
   const { user, loading } = useAuth();
   const [d, setD] = useState<VehicleDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("overview");
+  const searchParams = useSearchParams();
+  const [tab, setTab] = useState<Tab>(
+    (searchParams.get("tab") as Tab) || "overview",
+  );
+  const [faultCount, setFaultCount] = useState<number | null>(null);
   const [odo, setOdo] = useState("");
   const [schedOpen, setSchedOpen] = useState(false);
   const [schedForm, setSchedForm] = useState({ title: "", miles: "", months: "" });
@@ -557,6 +614,14 @@ function VehicleInner() {
   useEffect(() => {
     if (user) load();
   }, [user, load]);
+
+  // Fault count for the tab badge, so it's right before the tab is opened.
+  useEffect(() => {
+    if (!user) return;
+    api<{ active: EngineFault[] }>(`/api/fleet/vehicles/${id}/faults`)
+      .then((d) => setFaultCount(d.active.length))
+      .catch(() => {});
+  }, [user, id]);
 
   if (loading) return <Loader />;
   if (!user) return <p className="mx-auto max-w-5xl px-4 py-10 text-steel">Sign in to view your fleet.</p>;
@@ -603,6 +668,7 @@ function VehicleInner() {
     ["maintenance", "Maintenance", dueCount || null],
     ["defects", "PTI defects", openDefects || null],
     ["docs", "Documents", null],
+    ["faults", "Engine faults", faultCount || null],
     ["loan", "Loan schedule", null],
     ["history", "History", d.bookings.length || null],
   ];
@@ -945,6 +1011,8 @@ function VehicleInner() {
         )}
 
         {tab === "docs" && <DocumentsSection vehicleId={id} />}
+
+        {tab === "faults" && <FaultsTab vehicleId={id} onCount={setFaultCount} />}
 
         {tab === "loan" && <LoanTab vehicleId={id} />}
 

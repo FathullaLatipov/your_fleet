@@ -425,6 +425,10 @@ class VehicleOut(ORMModel):
     odometer_miles: float | None
     odometer_updated_at: datetime | None
     odometer_source: str | None
+    fuel_percent: float | None = None
+    fuel_updated_at: datetime | None = None
+    engine_hours: float | None = None
+    engine_hours_updated_at: datetime | None = None
     samsara_vehicle_id: str | None
     last_lat: float | None
     last_lng: float | None
