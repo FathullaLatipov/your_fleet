@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
 import { StatusBadge } from "@/components/badges";
-import { FaultCodesModal, FleetFault } from "@/components/FaultCodesModal";
+import { FleetFault } from "@/components/FaultCard";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -236,50 +236,22 @@ function buildTodos(workOrders: WoLite[], deadlines: Analytics["deadlines"]): To
   return items.sort((a, b) => Number(b.urgent) - Number(a.urgent)).slice(0, 7);
 }
 
-/* Right-column summary of active engine fault codes. The whole card opens the
-   Fault codes modal — there is no separate sidebar tab for it. */
-function FaultCodesCard({ faults, onOpen }: { faults: FleetFault[] | null; onOpen: () => void }) {
-  const units = new Map<string, number>();
-  for (const f of faults ?? []) units.set(f.unit_number, (units.get(f.unit_number) ?? 0) + 1);
-  const topUnits = [...units.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
+/* Compact Fault codes pill for the dashboard: label + active-count badge.
+   Links to the full /faults page (no modal, no sidebar tab). */
+function FaultCodesPill({ faults }: { faults: FleetFault[] | null }) {
   const total = faults?.length ?? 0;
-
   return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="card block w-full p-5 text-left transition-[border-color,box-shadow] hover:border-pine/50 hover:shadow-(--shadow-lift)"
+    <Link
+      href="/faults"
+      className="inline-flex items-center gap-2 self-start rounded-lg border border-line bg-panel px-3.5 py-2 text-sm font-semibold shadow-(--shadow-card) transition-[border-color,box-shadow] hover:border-pine/50 hover:shadow-(--shadow-lift)"
     >
-      <div className="flex items-baseline justify-between gap-3">
-        <h3 className="text-lg font-bold">Fault codes</h3>
-        {faults !== null && total > 0 && (
-          <span className="rounded-full bg-danger-wash px-2.5 py-0.5 text-xs font-bold tabular-nums text-danger">
-            {total} active
-          </span>
-        )}
-      </div>
-
-      {faults === null ? (
-        <p className="mt-3 text-sm text-faint">Loading…</p>
-      ) : total === 0 ? (
-        <p className="mt-3 text-sm text-steel">No active fault codes. 🎉</p>
-      ) : (
-        <>
-          <p className="mt-2 text-sm text-steel">
-            Across {units.size} truck{units.size === 1 ? "" : "s"} · from Samsara
-          </p>
-          <ul className="mt-3 space-y-1.5">
-            {topUnits.map(([unit, count]) => (
-              <li key={unit} className="flex items-center justify-between gap-2 text-sm">
-                <span className="rounded bg-mist px-1.5 py-0.5 text-xs font-semibold text-steel">#{unit}</span>
-                <span className="tabular-nums text-steel">{count} code{count === 1 ? "" : "s"}</span>
-              </li>
-            ))}
-          </ul>
-          <span className="mt-3 inline-block text-sm font-medium text-pine">View all →</span>
-        </>
+      Fault codes
+      {faults !== null && total > 0 && (
+        <span className="rounded-full bg-danger-wash px-2 py-0.5 text-xs font-bold tabular-nums text-danger">
+          {total}
+        </span>
       )}
-    </button>
+    </Link>
   );
 }
 
@@ -288,7 +260,6 @@ function DashboardInner() {
   const [data, setData] = useState<Analytics | null>(null);
   const [workOrders, setWorkOrders] = useState<WoLite[]>([]);
   const [faults, setFaults] = useState<FleetFault[] | null>(null);
-  const [faultsOpen, setFaultsOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(() => {
@@ -431,11 +402,9 @@ function DashboardInner() {
             )}
           </section>
 
-          <FaultCodesCard faults={faults} onOpen={() => setFaultsOpen(true)} />
+          <FaultCodesPill faults={faults} />
         </div>
       </div>
-
-      {faultsOpen && <FaultCodesModal onClose={() => setFaultsOpen(false)} />}
 
       {/* To do: everything waiting on the owner, in one list */}
       {(() => {

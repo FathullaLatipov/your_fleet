@@ -20,6 +20,13 @@ export interface EngineFault {
   cleared_at: string | null;
 }
 
+/* A fleet-wide fault row (from /api/fleet/faults) also carries which truck
+   it belongs to. */
+export interface FleetFault extends EngineFault {
+  vehicle_id: string;
+  unit_number: string;
+}
+
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "—";
 

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
-import { FaultCodesModal } from "@/components/FaultCodesModal";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -67,7 +66,6 @@ function FuelInner() {
   const [data, setData] = useState<FuelData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [onlyConnected, setOnlyConnected] = useState(true);
-  const [faultsOpen, setFaultsOpen] = useState(false);
 
   const load = useCallback(() => {
     api<FuelData>("/api/fleet/fuel")
@@ -98,15 +96,14 @@ function FuelInner() {
         <p className="text-sm text-steel">
           Odometer, fuel level and engine hours straight from Samsara. Updates every 15 minutes.
         </p>
-        <button type="button" onClick={() => setFaultsOpen(true)} className="btn-quiet !py-2 text-sm">
+        <Link href="/faults" className="btn-quiet !py-2 text-sm">
           Fault codes{s.trucks_with_faults > 0 && (
             <span className="ml-1.5 rounded bg-danger-wash px-1.5 text-xs font-bold text-danger">
               {s.trucks_with_faults}
             </span>
           )}
-        </button>
+        </Link>
       </div>
-      {faultsOpen && <FaultCodesModal onClose={() => setFaultsOpen(false)} />}
 
       <div className="mt-4 grid gap-4 sm:grid-cols-4">
         {[
