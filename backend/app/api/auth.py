@@ -1,4 +1,5 @@
 import hashlib
+import html
 import secrets
 from datetime import timedelta
 
@@ -10,9 +11,13 @@ from app.db import get_db
 from app.models import User, utcnow
 from app.rate_limit import rate_limit
 from app.schemas import (
-    LoginIn, RegisterIn, ResendCodeIn, TokenOut, UserOut, VerifyEmailIn,
+    ForgotPasswordIn, LoginIn, RegisterIn, ResendCodeIn, ResetPasswordIn, TokenOut, UserOut,
+    VerifyEmailIn,
 )
-from app.security import create_access_token, get_current_user, hash_password, verify_password
+from app.security import (
+    RESET_TOKEN_TTL_MINUTES, create_access_token, create_password_reset_token,
+    get_current_user, hash_password, user_for_reset_token, verify_password,
+)
 from app.services import email as email_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -130,6 +135,50 @@ def login(body: LoginIn, request: Request, db: Session = Depends(get_db)):
     if user.email_verified_at is None and email_service.is_configured():
         raise HTTPException(status.HTTP_403_FORBIDDEN,
                             "Email not verified - enter the code we sent you")
+    return TokenOut(access_token=create_access_token(user))
+
+
+@router.post("/forgot-password", status_code=204)
+def forgot_password(body: ForgotPasswordIn, request: Request, db: Session = Depends(get_db)):
+    """Email a reset link. Same response whether or not the account exists."""
+    rate_limit(request, "forgot-password", limit=6, window_s=3600)
+    if not email_service.is_configured():
+        raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE,
+                            "Password reset by email isn't available - contact support")
+    user = db.execute(select(User).where(User.email == body.email.lower())).scalar_one_or_none()
+    if user is None or not user.is_active:
+        return
+    token = create_password_reset_token(user)
+    email_service.send(
+        user.email,
+        "Reset your YourFleet password",
+        email_service.render(
+            "Reset your password",
+            f"<p>Hi {html.escape(user.full_name.split(' ')[0])},</p>"
+            "<p>We got a request to reset the password for your YourFleet account. "
+            f"The button below works once and expires in {RESET_TOKEN_TTL_MINUTES} minutes.</p>"
+            "<p>If you didn't ask for this, ignore this email - your password stays the same.</p>",
+            cta_label="Reset password",
+            cta_path=f"/reset-password?token={token}",
+        ),
+    )
+
+
+@router.post("/reset-password", response_model=TokenOut)
+def reset_password(body: ResetPasswordIn, request: Request, db: Session = Depends(get_db)):
+    """Set a new password from an emailed link; signs the user in on success."""
+    rate_limit(request, "reset-password", limit=20, window_s=900)
+    user = user_for_reset_token(body.token, db)
+    if user is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "This reset link is invalid or expired - request a new one")
+    user.password_hash = hash_password(body.password)  # also invalidates the link
+    if user.email_verified_at is None:
+        # Opening the emailed link proves they own the inbox.
+        user.email_verified_at = utcnow()
+        user.verify_code_hash = None
+        user.verify_expires_at = None
+    db.commit()
     return TokenOut(access_token=create_access_token(user))
 
 

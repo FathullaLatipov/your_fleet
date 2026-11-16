@@ -39,7 +39,13 @@ function LoginInner() {
                  onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
         </div>
         <div>
-          <label className="text-sm font-medium text-steel" htmlFor="password">Password</label>
+          <div className="flex items-baseline justify-between">
+            <label className="text-sm font-medium text-steel" htmlFor="password">Password</label>
+            <Link href={email ? `/forgot-password?email=${encodeURIComponent(email)}` : "/forgot-password"}
+                  className="text-sm font-medium text-pine hover:underline">
+              Forgot password?
+            </Link>
+          </div>
           <input id="password" type="password" required className="field mt-1" value={password}
                  onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
         </div>

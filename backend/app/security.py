@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import hmac
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -37,6 +39,50 @@ def create_access_token(user: User) -> str:
         "exp": now + timedelta(minutes=settings.jwt_expires_minutes),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
+
+
+RESET_TOKEN_TTL_MINUTES = 30
+
+
+def _reset_key() -> str:
+    # A separate signing key, so a reset link can never pass as an access token.
+    return get_settings().jwt_secret + ":password-reset"
+
+
+def _password_fingerprint(user: User) -> str:
+    return hashlib.sha256(user.password_hash.encode("ascii")).hexdigest()[:32]
+
+
+def create_password_reset_token(user: User) -> str:
+    """Short-lived, single-use reset token.
+
+    It carries a fingerprint of the current password hash, so it stops working
+    the moment the password changes — no server-side token storage needed.
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user.id),
+        "fp": _password_fingerprint(user),
+        "iat": now,
+        "exp": now + timedelta(minutes=RESET_TOKEN_TTL_MINUTES),
+    }
+    return jwt.encode(payload, _reset_key(), algorithm="HS256")
+
+
+def user_for_reset_token(token: str, db: Session) -> User | None:
+    """The user a reset token belongs to, or None if it's invalid/expired/used."""
+    try:
+        payload = jwt.decode(token, _reset_key(), algorithms=["HS256"])
+        user_id = uuid.UUID(payload["sub"])
+        fingerprint = payload["fp"]
+    except (jwt.PyJWTError, KeyError, ValueError):
+        return None
+    user = db.get(User, user_id)
+    if user is None or not user.is_active:
+        return None
+    if not hmac.compare_digest(str(fingerprint), _password_fingerprint(user)):
+        return None
+    return user
 
 
 def get_current_user(
