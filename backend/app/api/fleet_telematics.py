@@ -98,6 +98,32 @@ def fuel_overview(user: User = Depends(fleet_user), db: Session = Depends(get_db
     }
 
 
+@router.get("/positions")
+def fleet_positions(user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    """Live truck positions for the map: unit, driver, GPS, heading, speed."""
+    vehicles = db.execute(
+        select(Vehicle).where(Vehicle.owner_user_id == user.id)
+        .order_by(Vehicle.unit_number)
+    ).scalars().all()
+    driver_by_vehicle = {}
+    for d in db.execute(select(FleetDriver).where(
+            FleetDriver.owner_user_id == user.id,
+            FleetDriver.assigned_vehicle_id.is_not(None))).scalars():
+        driver_by_vehicle[d.assigned_vehicle_id] = d.name
+    items = [{
+        "id": str(v.id),
+        "unit_number": v.unit_number,
+        "driver": driver_by_vehicle.get(v.id) or v.operator_name,
+        "lat": v.last_lat,
+        "lng": v.last_lng,
+        "heading": v.last_heading,
+        "speed_mph": v.last_speed_mph,
+        "located_at": _iso(v.last_location_at),
+        "connected": v.samsara_vehicle_id is not None,
+    } for v in vehicles if v.last_lat is not None]
+    return {"items": items}
+
+
 @router.get("/faults")
 def fleet_faults(active: bool = Query(default=True),
                  user: User = Depends(fleet_user), db: Session = Depends(get_db)):

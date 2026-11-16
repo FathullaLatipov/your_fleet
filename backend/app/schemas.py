@@ -74,6 +74,15 @@ class ResendCodeIn(BaseModel):
     email: EmailStr
 
 
+class ForgotPasswordIn(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordIn(BaseModel):
+    token: str = Field(min_length=10, max_length=2048)
+    password: str = Field(min_length=8, max_length=128)
+
+
 class UserOut(ORMModel):
     id: uuid.UUID
     email: EmailStr
@@ -432,6 +441,8 @@ class VehicleOut(ORMModel):
     samsara_vehicle_id: str | None
     last_lat: float | None
     last_lng: float | None
+    last_heading: float | None = None
+    last_speed_mph: float | None = None
     last_location_at: datetime | None
     created_at: datetime
     # aggregates filled by the router

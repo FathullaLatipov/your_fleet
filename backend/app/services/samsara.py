@@ -43,6 +43,8 @@ class SamsaraStats:
     located_at: datetime | None
     fuel_percent: float | None = None
     engine_seconds: float | None = None
+    heading: float | None = None
+    speed_mph: float | None = None
 
 
 @dataclass
@@ -122,6 +124,8 @@ class SamsaraClient:
                 located_at=datetime.fromisoformat(ts.replace("Z", "+00:00")) if ts else None,
                 fuel_percent=fuel.get("value"),
                 engine_seconds=hours.get("value"),
+                heading=gps.get("headingDegrees"),
+                speed_mph=gps.get("speedMilesPerHour"),
             ))
         return out
 
@@ -301,6 +305,8 @@ def sync_samsara(
             report.engine_hours_updated += 1
         if st.lat is not None:
             v.last_lat, v.last_lng = st.lat, st.lng
+            v.last_heading = st.heading
+            v.last_speed_mph = st.speed_mph
             v.last_location_at = st.located_at or utcnow()
         if not dry_run:  # sends notifications / emails
             report.maintenance_notifications += check_vehicle_maintenance(db, v)

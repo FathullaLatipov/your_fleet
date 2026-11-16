@@ -282,6 +282,8 @@ class Vehicle(Base):
     samsara_vehicle_id: Mapped[str | None] = mapped_column(String(64), index=True)
     last_lat: Mapped[float | None] = mapped_column(Float)
     last_lng: Mapped[float | None] = mapped_column(Float)
+    last_heading: Mapped[float | None] = mapped_column(Float)   # degrees, 0 = north
+    last_speed_mph: Mapped[float | None] = mapped_column(Float)
     last_location_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
