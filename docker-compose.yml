@@ -58,7 +58,10 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    command: ["python", "-m", "app.cli", "samsara-loop", "--create-missing",
+    # No --create-missing: connect/update trucks already in the fleet (matched
+    # by Samsara id, VIN, or unit number); don't invent trucks for Samsara
+    # gateway serials. Add --create-missing back for a fresh, empty account.
+    command: ["python", "-m", "app.cli", "samsara-loop",
               "--interval", "${SAMSARA_SYNC_INTERVAL:-900}"]
     environment:
       DATABASE_URL: postgresql+psycopg://yourfleet:${YF_DB_PASSWORD}@db:5432/yourfleet
