@@ -26,21 +26,23 @@ export interface LovesStop {
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/* A truck marker: a heading arrow when we know the direction, else a dot. */
+/* A truck marker: a side-view truck with its unit number in the cargo box. */
 function truckIcon(t: TruckPos, active: boolean) {
-  const cls = active ? "yf-truck yf-truck--active" : "yf-truck";
-  if (t.heading != null && (t.speed_mph ?? 0) > 1) {
-    return L.divIcon({
-      className: "",
-      html: `<div class="${cls}" style="transform:rotate(${t.heading}deg)">
-        <svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 2 L19 21 L12 16 L5 21 Z"/></svg></div>`,
-      iconSize: [28, 28], iconAnchor: [14, 14], popupAnchor: [0, -14],
-    });
-  }
+  const cls = active ? "yf-truckm active" : "yf-truckm";
+  const label = esc(t.unit_number);
+  const fs = label.length > 4 ? 10 : 12;
   return L.divIcon({
     className: "",
-    html: `<div class="${cls} yf-truck--dot"><span>${esc(t.unit_number)}</span></div>`,
-    iconSize: [30, 30], iconAnchor: [15, 15], popupAnchor: [0, -15],
+    html: `<div class="${cls}">
+      <svg viewBox="0 0 56 32" width="56" height="32">
+        <circle cx="16" cy="27" r="4" fill="currentColor"/>
+        <circle cx="44" cy="27" r="4" fill="currentColor"/>
+        <path d="M41 24 V13 H47 L51 18 V24 Z" fill="currentColor"/>
+        <rect class="box" x="2" y="5" width="39" height="19" rx="3" stroke-width="2"/>
+        <text class="num" x="21.5" y="15" text-anchor="middle" dominant-baseline="central"
+              font-size="${fs}" font-weight="700">${label}</text>
+      </svg></div>`,
+    iconSize: [56, 32], iconAnchor: [28, 27], popupAnchor: [0, -24],
   });
 }
 

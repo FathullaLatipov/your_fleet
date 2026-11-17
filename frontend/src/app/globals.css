@@ -174,6 +174,16 @@ h1, h2, h3, .display {
 }
 .yf-truck--active.yf-truck--dot { background: var(--color-pine); outline: 3px solid rgb(23 82 53 / 0.35); }
 .yf-truck--active svg { fill: var(--color-pine); }
+/* Truck-with-number marker: cab + wheels take currentColor, the cargo box
+   holds the unit number. Selected = pine fill + white number. */
+.yf-truckm { color: var(--color-charcoal); }
+.yf-truckm svg { overflow: visible; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 0.4)); }
+.yf-truckm .box { fill: #fff; stroke: currentColor; }
+.yf-truckm .num { fill: var(--color-charcoal); font-family: var(--font-sans); }
+.yf-truckm.active { color: var(--color-pine); }
+.yf-truckm.active svg { filter: drop-shadow(0 0 3px rgb(23 82 53 / 0.6)); }
+.yf-truckm.active .box { fill: var(--color-pine); }
+.yf-truckm.active .num { fill: #fff; }
 .yf-loves {
   display: grid;
   place-items: center;

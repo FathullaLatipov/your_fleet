@@ -119,8 +119,10 @@ function TrackInner() {
                       <span className="font-semibold">#{t.unit_number}</span>
                       {t.driver && <span className="ml-1.5 text-steel">{t.driver}</span>}
                     </span>
-                    <span className="shrink-0 text-xs text-faint">
-                      {t.speed_mph != null && (t.speed_mph ?? 0) > 1 ? `${Math.round(t.speed_mph)} mph` : ago(t.located_at)}
+                    <span className="shrink-0 text-xs text-faint tabular-nums">
+                      <span className="text-steel">{Math.round(t.speed_mph ?? 0)} mph</span>
+                      {" / "}
+                      {ago(t.located_at)}
                     </span>
                   </button>
                 ))}
