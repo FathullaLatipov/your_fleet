@@ -12,6 +12,20 @@ class TestPerformanceHeaders:
         assert "s-maxage" in r.headers.get("cache-control", "")
         r = client.get("/api/search", params={"limit": 5})
         assert "public" in r.headers.get("cache-control", "")
+        # Public reads are anonymous and identical for everyone: the shared CDN
+        # cache must not fragment per Origin.
+        assert "Origin" not in r.headers.get("vary", "")
+
+    def test_empty_results_are_not_cached(self, client, db):
+        # An empty directory must never be cached and served to a whole region.
+        make_business(db, "Somewhere Shop")  # exists, but filtered out below
+        r = client.get("/api/search", params={"location": "Nowheresville, ZZ"})
+        assert r.status_code == 200 and r.json()["total"] == 0
+        assert "s-maxage" not in r.headers.get("cache-control", "")
+        assert "no-store" in r.headers.get("cache-control", "")
+        rm = client.get("/api/search/map", params={"location": "Nowheresville, ZZ"})
+        assert rm.status_code == 200 and rm.json()["items"] == []
+        assert "no-store" in rm.headers.get("cache-control", "")
 
     def test_business_detail_not_cached(self, client, db):
         b = make_business(db, "Counted Views Shop")

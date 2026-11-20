@@ -41,6 +41,12 @@ async def public_cache_headers(request: Request, call_next):
     if (request.method == "GET" and request.url.path in PUBLIC_CACHEABLE
             and response.status_code == 200 and "cache-control" not in response.headers):
         response.headers["Cache-Control"] = PUBLIC_CACHE_CONTROL
+        # These reads are anonymous and identical for everyone, so the shared
+        # CDN cache must key on encoding only. CORSMiddleware adds "Vary: Origin"
+        # (it echoes the Origin for credentialed CORS); combined with a public,
+        # cacheable body that fragments the cache per-Origin across edges and can
+        # strand a bad/empty snapshot for one region. Pin Vary to encoding.
+        response.headers["Vary"] = "Accept-Encoding"
     return response
 
 for router in (auth.router, businesses.router, claims.router, offers.router,

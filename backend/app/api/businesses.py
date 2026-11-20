@@ -3,7 +3,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
@@ -112,6 +112,7 @@ def public_stats(db: Session = Depends(get_db)):
 
 @router.get("/search")
 def search(
+    response: Response,
     db: Session = Depends(get_db),
     lat: float | None = Query(default=None, ge=-90, le=90),
     lng: float | None = Query(default=None, ge=-180, le=180),
@@ -161,6 +162,10 @@ def search(
         sort=sort, limit=limit, offset=offset,
     )
     rows, total = search_businesses(db, filters)
+    if total == 0:
+        # Never let an empty directory be cached and served to a whole region —
+        # the public-cache middleware only sets caching when no header is present.
+        response.headers["Cache-Control"] = "no-store"
     return {
         "total": total,
         "items": [BusinessListItem(**r) for r in rows],
@@ -171,6 +176,7 @@ def search(
 
 @router.get("/search/map")
 def search_map(
+    response: Response,
     db: Session = Depends(get_db),
     lat: float | None = Query(default=None, ge=-90, le=90),
     lng: float | None = Query(default=None, ge=-180, le=180),
@@ -208,7 +214,10 @@ def search_map(
         emergency_only=emergency_only, min_rating=min_rating, min_reviews=min_reviews,
         open_now=open_now,
     )
-    return {"items": search_map_points(db, filters)}
+    points = search_map_points(db, filters)
+    if not points:
+        response.headers["Cache-Control"] = "no-store"
+    return {"items": points}
 
 
 def _active_offers(db: Session, business: Business) -> list[Offer]:
