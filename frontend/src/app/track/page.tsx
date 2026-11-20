@@ -44,13 +44,28 @@ function ago(iso: string | null): string {
 const LIST_CAP = 300;
 
 /* Small orange "L" badge — same mark Love's gets on the map. */
-function LovesBadge() {
+function LovesBadge({ className = "h-7 w-7 text-xs" }: { className?: string }) {
   return (
-    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-cta text-xs font-extrabold text-white shadow-sm">
+    <span className={`grid shrink-0 place-items-center rounded-full bg-cta font-extrabold text-white shadow-sm ${className}`}>
       L
     </span>
   );
 }
+
+/* Amenities standard to the Love's Travel Stop format (the chain we filtered
+   to). Per-store extras vary, so the panel labels these as typical. */
+const AMENITIES: { label: string; icon: React.ReactNode }[] = [
+  { label: "Truck Parking", icon: <path d="M5 4h14v16H5zM9 16V9h3.5a2.5 2.5 0 0 1 0 5H9" /> },
+  { label: "Maintenance", icon: <path d="M14 7a4 4 0 0 1-5 5l-5 5 2 2 5-5a4 4 0 0 0 5-5z" /> },
+  { label: "ATM", icon: <path d="M3 6h18v12H3zM3 10h18" /> },
+  { label: "Scales", icon: <path d="M12 3v18M6 7h12M6 7l-3 6a3 3 0 0 0 6 0zM18 7l-3 6a3 3 0 0 0 6 0z" /> },
+  { label: "Pet Area", icon: <path d="M6 13a3 3 0 0 0-3 3 2 2 0 0 0 2 2h14a2 2 0 0 0 2-2 3 3 0 0 0-3-3M7 9v.01M12 7v.01M17 9v.01" /> },
+  { label: "Laundry", icon: <path d="M5 3h14v18H5zM12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM8 6h.01M11 6h.01" /> },
+  { label: "Overnight", icon: <path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z" /> },
+  { label: "Shower", icon: <path d="M12 3s5 6 5 10a5 5 0 0 1-10 0c0-4 5-10 5-10z" /> },
+  { label: "WiFi", icon: <path d="M5 12a10 10 0 0 1 14 0M8 15a6 6 0 0 1 8 0M12 18h.01" /> },
+  { label: "Restaurant", icon: <path d="M7 3v8M5 3v4a2 2 0 0 0 4 0V3M7 11v10M16 3c-2 0-3 2-3 5s1 4 3 4v9" /> },
+];
 
 function TrackInner() {
   const { user } = useAuth();
@@ -65,6 +80,8 @@ function TrackInner() {
   const [stateFilter, setStateFilter] = useState("");
   const [sort, setSort] = useState<"nearest" | "name">("nearest");
   const [station, setStation] = useState<LovesStop | null>(null); // opened Love's detail
+  const [stationTab, setStationTab] = useState<"info" | "amenities">("info");
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -128,7 +145,7 @@ function TrackInner() {
     const where = [s.city, s.state].filter(Boolean).join(", ");
     const active = station?.lat === s.lat && station?.lng === s.lng;
     return (
-      <button type="button" onClick={() => setStation(s)}
+      <button type="button" onClick={() => { setStation(s); setStationTab("info"); }}
               className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
                 active ? "bg-panel shadow-(--shadow-card)" : "hover:bg-panel/60"}`}>
         <LovesBadge />
@@ -151,45 +168,95 @@ function TrackInner() {
   const StationDetail = () => {
     if (!station) return null;
     const where = [station.city, station.state].filter(Boolean).join(", ");
+    const title = station.ref ? `Love's #${station.ref}` : "Love's Travel Stop";
+    const address = [station.street, where].filter(Boolean).join(", ");
     const gmaps = selected
       ? `https://www.google.com/maps/dir/${selected.lat},${selected.lng}/${station.lat},${station.lng}`
       : `https://www.google.com/maps/search/?api=1&query=${station.lat},${station.lng}`;
+    const copyAddress = () => {
+      navigator.clipboard?.writeText(address || `${station.lat}, ${station.lng}`)
+        .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); })
+        .catch(() => {});
+    };
+    const Row = ({ label, children }: { label: string; children: React.ReactNode }) => (
+      <div>
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-faint">{label}</p>
+        <div className="mt-0.5 text-sm text-ink">{children}</div>
+      </div>
+    );
     return (
       <div className="absolute inset-x-3 top-3 z-[600] sm:left-auto sm:right-3 sm:w-80">
-        <div className="card overflow-hidden p-0 shadow-(--shadow-lift)">
-          <div className="flex items-start gap-3 border-b border-line p-4">
-            <LovesBadge />
-            <div className="min-w-0 flex-1">
-              <h3 className="font-bold leading-snug">{station.name || "Love's Travel Stop"}</h3>
-              <p className="text-xs text-steel">Love&apos;s Travel Stop</p>
-            </div>
+        <div className="card flex max-h-[calc(100%-1.5rem)] flex-col overflow-hidden p-0 shadow-(--shadow-lift)">
+          {/* Header */}
+          <div className="flex items-center gap-3 border-b border-line px-4 py-3">
+            <LovesBadge className="h-9 w-9 text-sm" />
+            <h3 className="min-w-0 flex-1 truncate font-bold">{title}</h3>
             <button type="button" onClick={() => setStation(null)} aria-label="Close"
                     className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-lg text-steel hover:bg-mist hover:text-ink">
               ×
             </button>
           </div>
-          <div className="space-y-2 p-4 text-sm">
-            {(station.street || where) && (
-              <p className="text-ink">
-                {station.street && <>{station.street}<br /></>}
-                {where || "United States"}
-              </p>
+          {/* Tabs */}
+          <div className="flex gap-2 px-4 pt-3">
+            {([["info", "General Information"], ["amenities", "Amenities"]] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setStationTab(k)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${
+                        stationTab === k ? "bg-cta text-white" : "bg-mist text-steel hover:text-ink"}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+            {stationTab === "info" ? (
+              <div className="space-y-3.5">
+                <Row label="Address">
+                  <div className="flex items-start justify-between gap-2">
+                    <span>{address || "United States"}</span>
+                    <button type="button" onClick={copyAddress} aria-label="Copy address"
+                            className="shrink-0 text-steel hover:text-ink" title="Copy address">
+                      {copied ? <span className="text-xs font-semibold text-pine">Copied</span> : "⧉"}
+                    </button>
+                  </div>
+                </Row>
+                {stationMiles != null && (
+                  <span className="inline-flex items-center gap-1.5 rounded-full bg-cta/10 px-2.5 py-1 text-xs font-semibold text-cta">
+                    📍 {stationMiles} mi from #{selected!.unit_number}
+                  </span>
+                )}
+                <Row label="Name">{title}</Row>
+                <Row label="Coordinates">
+                  <span className="tabular-nums">{station.lat.toFixed(5)}, {station.lng.toFixed(5)}</span>
+                </Row>
+                <div className="pt-1">
+                  <a href={gmaps} target="_blank" rel="noopener noreferrer"
+                     className="btn-quiet !py-1.5 text-sm">Directions ↗</a>
+                </div>
+                <p className="border-t border-line pt-2 text-[11px] text-faint">
+                  Fuel prices &amp; IFTA aren&apos;t connected yet. Location from OpenStreetMap;
+                  not affiliated with Love&apos;s.
+                </p>
+              </div>
+            ) : (
+              <div>
+                <div className="grid grid-cols-3 gap-2">
+                  {AMENITIES.map((a) => (
+                    <div key={a.label}
+                         className="flex flex-col items-center gap-1.5 rounded-lg border border-line bg-mist/40 px-1 py-3 text-center">
+                      <svg viewBox="0 0 24 24" width="22" height="22" fill="none"
+                           stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"
+                           strokeLinejoin="round" className="text-steel">
+                        {a.icon}
+                      </svg>
+                      <span className="text-[11px] font-medium leading-tight text-steel">{a.label}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="mt-3 text-[11px] text-faint">
+                  Typical Love&apos;s Travel Stop amenities — verify on site; extras vary by location.
+                </p>
+              </div>
             )}
-            {stationMiles != null && (
-              <p className="text-steel">
-                <span className="font-semibold text-cta">{stationMiles} mi</span> from #{selected!.unit_number}
-              </p>
-            )}
-            <p className="text-xs text-faint tabular-nums">
-              {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
-            </p>
-            <div className="flex gap-2 pt-1">
-              <a href={gmaps} target="_blank" rel="noopener noreferrer"
-                 className="btn-quiet !py-1.5 text-sm">Directions ↗</a>
-            </div>
-            <p className="pt-1 text-[11px] text-faint">
-              Location from OpenStreetMap. Not affiliated with Love&apos;s.
-            </p>
           </div>
         </div>
       </div>
@@ -336,7 +403,7 @@ function TrackInner() {
         {/* RIGHT: map (always shows trucks + Love's). Hidden on mobile in List tab. */}
         <div className={`relative min-h-0 flex-1 ${tab === "list" ? "hidden lg:block" : ""}`}>
           <TrackMap trucks={trucks} loves={loves} selectedId={selectedId} onSelectTruck={setSelectedId}
-                    onSelectLoves={setStation} focusStation={station} />
+                    onSelectLoves={(s) => { setStation(s); setStationTab("info"); }} focusStation={station} />
           <div className="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-md border border-line bg-panel/95 px-3 py-2 text-xs text-steel shadow">
             <span className="mr-3 inline-flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-charcoal" /> Truck
