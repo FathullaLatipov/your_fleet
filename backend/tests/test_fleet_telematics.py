@@ -63,6 +63,26 @@ class TestTelematics:
         assert client.get("/api/fleet/faults", headers=h).json() == []  # active-only default
         assert len(client.get("/api/fleet/faults?active=false", headers=h).json()) == 1
 
+    def test_cleared_fault_reappears_reactivates_same_row(self, client, db):
+        # A flickering code clears then comes back: it must reactivate its
+        # existing row, not insert a duplicate (the unique key ignores is_active).
+        u, h = fleet_user(client, db, "tel-reappear@example.com")
+        add_vehicle(client, h, unit="01", vin="4V4NC9EH1KN214702")
+        args = dict(
+            vehicles_fn=lambda: [SamsaraVehicle(id="sam-1", name="01", vin="4V4NC9EH1KN214702")],
+            stats_fn=lambda: [], defects_fn=lambda: [])
+        sync_samsara(db, u, faults_fn=lambda: [dtc(639, 2, 11, 10)], **args)
+        sync_samsara(db, u, faults_fn=lambda: [], **args)  # cleared
+        report = sync_samsara(db, u, faults_fn=lambda: [dtc(639, 2, 11, 55)], **args)  # back
+        assert report.faults_active == 1  # reactivated, no UniqueViolation
+        v = db.execute(select(Vehicle).where(Vehicle.owner_user_id == u.id)).scalar_one()
+        vf = client.get(f"/api/fleet/vehicles/{v.id}/faults", headers=h).json()
+        assert len(vf["active"]) == 1 and vf["cleared"] == []
+        assert vf["active"][0]["occurrence_count"] == 55  # updated in place
+        # Exactly one row for that key in the whole table.
+        all_rows = client.get("/api/fleet/faults?active=false", headers=h).json()
+        assert len([f for f in all_rows if f["spn"] == 639]) == 1
+
     def test_duplicate_device_same_fault_is_deduped(self, client, db):
         # One truck, two Samsara gateways, both report the same code in one run.
         u, h = fleet_user(client, db, "tel-dup@example.com")

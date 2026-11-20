@@ -379,13 +379,17 @@ def _sync_faults(
         return
 
     our_vehicle_ids = {v.id for v in by_samsara_id.values()}
+    # Load ALL rows for these vehicles (active and already-cleared). The unique
+    # key is (vehicle, protocol, spn, fmi, tx_id) regardless of is_active, so a
+    # fault that cleared and then reappears must reactivate its existing row —
+    # inserting a new one collides with the cleared row.
     existing = db.execute(
         select(VehicleEngineFault).where(
             VehicleEngineFault.vehicle_id.in_(our_vehicle_ids or {None}),
-            VehicleEngineFault.is_active.is_(True),
         )
     ).scalars().all()
     by_key = {(f.vehicle_id, f.protocol, f.spn, f.fmi, f.tx_id): f for f in existing}
+    active_before = {k for k, f in by_key.items() if f.is_active}
 
     now = utcnow()
     # A truck can have two Samsara devices (a replaced gateway) both reporting
@@ -427,8 +431,11 @@ def _sync_faults(
             handled[key] = row
             report.faults_active += 1
 
-    for key, row in by_key.items():
+    # Clear only faults that were active before and Samsara no longer reports —
+    # never re-clear rows that were already inactive.
+    for key in active_before:
         if key not in handled:
+            row = by_key[key]
             row.is_active = False
             row.cleared_at = now
             report.faults_cleared += 1
