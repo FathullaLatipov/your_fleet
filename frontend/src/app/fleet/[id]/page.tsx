@@ -632,8 +632,6 @@ function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () 
 
 /* ------------------------------------------------------------------ */
 
-const fmtMonth = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "—";
 const fmtDate = (iso: string | null) =>
   iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
 
@@ -687,10 +685,10 @@ function DriverHistoryTab({ d, vehicleId, onChange }:
             ) : rows.map((a) => (
               <tr key={a.id} className="border-b border-line/60">
                 <td className="py-2.5 pr-3 font-medium">{a.driver_name}</td>
-                <td className="py-2.5 pr-3 text-steel">{fmtMonth(a.start_date)}</td>
+                <td className="py-2.5 pr-3 text-steel">{fmtDate(a.start_date)}</td>
                 <td className="py-2.5 pr-3">
                   {a.end_date
-                    ? <span className="text-steel">{fmtMonth(a.end_date)}</span>
+                    ? <span className="text-steel">{fmtDate(a.end_date)}</span>
                     : <span className="rounded-full bg-pine-wash px-2 py-0.5 text-xs font-semibold text-pine">Current</span>}
                 </td>
                 <td className="py-2.5 text-right">
