@@ -32,7 +32,10 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 # Public, user-independent reads that the CDN and browser may cache briefly.
 # Business detail is deliberately absent: every view bumps its views_count.
-PUBLIC_CACHEABLE = {"/api/services", "/api/stats/public", "/api/search", "/api/search/map"}
+# Search is deliberately NOT cached: a stale/empty snapshot stranded on a CDN
+# edge made the shop finder show "No shops found" while the directory was full,
+# so search results must always come fresh from the origin.
+PUBLIC_CACHEABLE = {"/api/services", "/api/stats/public"}
 PUBLIC_CACHE_CONTROL = "public, max-age=60, s-maxage=120, stale-while-revalidate=600"
 
 

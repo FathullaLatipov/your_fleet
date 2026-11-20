@@ -162,10 +162,9 @@ def search(
         sort=sort, limit=limit, offset=offset,
     )
     rows, total = search_businesses(db, filters)
-    if total == 0:
-        # Never let an empty directory be cached and served to a whole region —
-        # the public-cache middleware only sets caching when no header is present.
-        response.headers["Cache-Control"] = "no-store"
+    # Search is never cached — results must be fresh. A cached/empty snapshot on
+    # a CDN edge previously made the finder show "No shops found" while full.
+    response.headers["Cache-Control"] = "no-store"
     return {
         "total": total,
         "items": [BusinessListItem(**r) for r in rows],
@@ -215,8 +214,7 @@ def search_map(
         open_now=open_now,
     )
     points = search_map_points(db, filters)
-    if not points:
-        response.headers["Cache-Control"] = "no-store"
+    response.headers["Cache-Control"] = "no-store"  # always fresh (see search())
     return {"items": points}
 
 

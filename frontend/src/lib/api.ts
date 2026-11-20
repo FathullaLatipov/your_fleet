@@ -55,6 +55,9 @@ export async function api<T>(
     method: opts.method ?? "GET",
     headers,
     body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    // Always hit the network: API data is dynamic, and a stale cached response
+    // (e.g. an empty search result) must never be served from the browser cache.
+    cache: "no-store",
   });
   if (res.status === 204) return undefined as T;
   let data: unknown = null;
