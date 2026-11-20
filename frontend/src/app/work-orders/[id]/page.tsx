@@ -266,6 +266,14 @@ function WorkOrderInner() {
     if (serviceType === "roadside" || serviceType === "towing") setCallType("roadside");
   }, [serviceType]);
 
+  // Pre-fill the quote's shop name with the assigned shop, so recording a
+  // quote from it doesn't mean retyping the name. Re-runs only when the
+  // assigned shop changes, so a manual edit isn't clobbered on reload.
+  const assignedShop = wo?.shop_name ?? null;
+  useEffect(() => {
+    if (assignedShop) setQShop(assignedShop);
+  }, [assignedShop]);
+
   async function act(key: string, path: string, body?: unknown) {
     setBusy(key);
     setActionError(null);
@@ -445,7 +453,7 @@ function WorkOrderInner() {
                   shop_name: qShop.trim(), price_cents: price,
                   eta: qEta.trim() || null, note: qNote.trim() || null,
                 })) {
-                  setQShop(""); setQPrice(""); setQEta(""); setQNote("");
+                  setQShop(assignedShop ?? ""); setQPrice(""); setQEta(""); setQNote("");
                 }
               }}>
         {busy === "quote" ? "Saving…" : "Add Quote"}
