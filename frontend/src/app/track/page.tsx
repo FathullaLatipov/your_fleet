@@ -64,6 +64,7 @@ function TrackInner() {
   const [query, setQuery] = useState("");
   const [stateFilter, setStateFilter] = useState("");
   const [sort, setSort] = useState<"nearest" | "name">("nearest");
+  const [station, setStation] = useState<LovesStop | null>(null); // opened Love's detail
 
   useEffect(() => {
     if (!user) return;
@@ -121,15 +122,15 @@ function TrackInner() {
   const totalStations = stations.length;
   const shown = stations.slice(0, tab === "list" ? LIST_CAP : 8);
 
-  // One station row, shared by both tabs. Opens driving directions.
+  // One station row, shared by both tabs. Opens our own detail panel
+  // (centers the map there too) instead of jumping to Google Maps.
   const StationRow = ({ s, d }: { s: LovesStop; d: number | null }) => {
     const where = [s.city, s.state].filter(Boolean).join(", ");
-    const href = selected
-      ? `https://www.google.com/maps/dir/${selected.lat},${selected.lng}/${s.lat},${s.lng}`
-      : `https://www.google.com/maps/search/?api=1&query=${s.lat},${s.lng}`;
+    const active = station?.lat === s.lat && station?.lng === s.lng;
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer"
-         className="flex items-center gap-3 rounded-lg px-3 py-2 text-sm hover:bg-panel/60">
+      <button type="button" onClick={() => setStation(s)}
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                active ? "bg-panel shadow-(--shadow-card)" : "hover:bg-panel/60"}`}>
         <LovesBadge />
         <span className="min-w-0 flex-1">
           <span className="font-medium">{s.name.replace(/^Love's ?/, "") || "Love's"}</span>
@@ -140,7 +141,58 @@ function TrackInner() {
             {Math.round(d)} mi
           </span>
         )}
-      </a>
+      </button>
+    );
+  };
+
+  // Detail panel for an opened Love's stop — our own "tab about that truck stop".
+  const stationMiles = station && selected
+    ? Math.round(miles(selected.lat, selected.lng, station.lat, station.lng)) : null;
+  const StationDetail = () => {
+    if (!station) return null;
+    const where = [station.city, station.state].filter(Boolean).join(", ");
+    const gmaps = selected
+      ? `https://www.google.com/maps/dir/${selected.lat},${selected.lng}/${station.lat},${station.lng}`
+      : `https://www.google.com/maps/search/?api=1&query=${station.lat},${station.lng}`;
+    return (
+      <div className="absolute inset-x-3 top-3 z-[600] sm:left-auto sm:right-3 sm:w-80">
+        <div className="card overflow-hidden p-0 shadow-(--shadow-lift)">
+          <div className="flex items-start gap-3 border-b border-line p-4">
+            <LovesBadge />
+            <div className="min-w-0 flex-1">
+              <h3 className="font-bold leading-snug">{station.name || "Love's Travel Stop"}</h3>
+              <p className="text-xs text-steel">Love&apos;s Travel Stop</p>
+            </div>
+            <button type="button" onClick={() => setStation(null)} aria-label="Close"
+                    className="grid h-7 w-7 shrink-0 place-items-center rounded-full text-lg text-steel hover:bg-mist hover:text-ink">
+              ×
+            </button>
+          </div>
+          <div className="space-y-2 p-4 text-sm">
+            {(station.street || where) && (
+              <p className="text-ink">
+                {station.street && <>{station.street}<br /></>}
+                {where || "United States"}
+              </p>
+            )}
+            {stationMiles != null && (
+              <p className="text-steel">
+                <span className="font-semibold text-cta">{stationMiles} mi</span> from #{selected!.unit_number}
+              </p>
+            )}
+            <p className="text-xs text-faint tabular-nums">
+              {station.lat.toFixed(5)}, {station.lng.toFixed(5)}
+            </p>
+            <div className="flex gap-2 pt-1">
+              <a href={gmaps} target="_blank" rel="noopener noreferrer"
+                 className="btn-quiet !py-1.5 text-sm">Directions ↗</a>
+            </div>
+            <p className="pt-1 text-[11px] text-faint">
+              Location from OpenStreetMap. Not affiliated with Love&apos;s.
+            </p>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -187,7 +239,8 @@ function TrackInner() {
     <div className="flex h-[calc(100vh-6.5rem)] flex-col lg:h-[calc(100vh-3.5rem)]">
       {Toolbar}
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        <StationDetail />
         {/* LEFT: Map tab -> trucks + nearby; List tab -> all stations */}
         <div className={`min-h-0 w-full overflow-y-auto border-r border-line bg-mist lg:max-w-[380px] ${
           tab === "list" ? "" : "hidden lg:block"}`}>
@@ -282,7 +335,8 @@ function TrackInner() {
 
         {/* RIGHT: map (always shows trucks + Love's). Hidden on mobile in List tab. */}
         <div className={`relative min-h-0 flex-1 ${tab === "list" ? "hidden lg:block" : ""}`}>
-          <TrackMap trucks={trucks} loves={loves} selectedId={selectedId} onSelectTruck={setSelectedId} />
+          <TrackMap trucks={trucks} loves={loves} selectedId={selectedId} onSelectTruck={setSelectedId}
+                    onSelectLoves={setStation} focusStation={station} />
           <div className="pointer-events-none absolute bottom-3 left-3 z-[500] rounded-md border border-line bg-panel/95 px-3 py-2 text-xs text-steel shadow">
             <span className="mr-3 inline-flex items-center gap-1.5">
               <span className="inline-block h-2.5 w-2.5 rounded-full bg-charcoal" /> Truck

@@ -22,6 +22,8 @@ export interface LovesStop {
   lng: number;
   city: string | null;
   state: string | null;
+  street?: string | null;
+  ref?: string | null;
 }
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
@@ -55,18 +57,23 @@ function lovesIcon() {
 }
 
 function Layers({
-  trucks, loves, selectedId, onSelectTruck,
+  trucks, loves, selectedId, onSelectTruck, onSelectLoves, focusStation,
 }: {
   trucks: TruckPos[];
   loves: LovesStop[];
   selectedId: string | null;
   onSelectTruck: (id: string) => void;
+  onSelectLoves?: (s: LovesStop) => void;
+  focusStation?: LovesStop | null;
 }) {
   const map = useMap();
   const truckLayer = useRef<L.LayerGroup | null>(null);
   const lovesLayer = useRef<L.MarkerClusterGroup | null>(null);
+  const onSelectLovesRef = useRef(onSelectLoves);
+  onSelectLovesRef.current = onSelectLoves;
 
-  // Love's cluster: drawn once, independent of selection.
+  // Love's cluster: drawn once, independent of selection. Clicking a stop
+  // opens our own detail panel (via onSelectLoves) — never Google Maps.
   useEffect(() => {
     const group = L.markerClusterGroup({
       maxClusterRadius: 50, showCoverageOnHover: false, chunkedLoading: true,
@@ -76,15 +83,21 @@ function Layers({
     });
     for (const s of loves) {
       const where = [s.city, s.state].filter(Boolean).join(", ");
-      L.marker([s.lat, s.lng], { icon: lovesIcon() })
-        .bindPopup(`<strong>${esc(s.name)}</strong>${where ? `<br/>${esc(where)}` : ""}` +
-          `<br/><a href="https://www.google.com/maps/dir/?api=1&destination=${s.lat},${s.lng}" target="_blank" rel="noopener">Directions</a>`)
-        .addTo(group);
+      const m = L.marker([s.lat, s.lng], { icon: lovesIcon(), title: `${s.name}${where ? ` — ${where}` : ""}` });
+      m.on("click", () => onSelectLovesRef.current?.(s));
+      m.addTo(group);
     }
     map.addLayer(group);
     lovesLayer.current = group;
     return () => { map.removeLayer(group); };
   }, [map, loves]);
+
+  // Center on a station when one is opened from the list/panel.
+  useEffect(() => {
+    if (focusStation) {
+      map.setView([focusStation.lat, focusStation.lng], Math.max(map.getZoom(), 11), { animate: true });
+    }
+  }, [map, focusStation]);
 
   // Truck markers: redrawn when positions or selection change.
   useEffect(() => {
@@ -118,12 +131,14 @@ function Layers({
 }
 
 export default function TrackMap({
-  trucks, loves, selectedId, onSelectTruck,
+  trucks, loves, selectedId, onSelectTruck, onSelectLoves, focusStation,
 }: {
   trucks: TruckPos[];
   loves: LovesStop[];
   selectedId: string | null;
   onSelectTruck: (id: string) => void;
+  onSelectLoves?: (s: LovesStop) => void;
+  focusStation?: LovesStop | null;
 }) {
   const center: [number, number] = trucks[0] ? [trucks[0].lat, trucks[0].lng] : [39.5, -96.5];
   return (
@@ -132,7 +147,8 @@ export default function TrackMap({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <Layers trucks={trucks} loves={loves} selectedId={selectedId} onSelectTruck={onSelectTruck} />
+      <Layers trucks={trucks} loves={loves} selectedId={selectedId} onSelectTruck={onSelectTruck}
+              onSelectLoves={onSelectLoves} focusStation={focusStation} />
     </MapContainer>
   );
 }
