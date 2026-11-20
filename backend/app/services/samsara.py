@@ -98,6 +98,10 @@ class SamsaraClient:
             after = pag.get("endCursor")
         return out
 
+    def ping(self) -> None:
+        """Cheap token check: one vehicle. Raises on auth/transport errors."""
+        self._http.get("/fleet/vehicles", params={"limit": 1}).raise_for_status()
+
     def vehicles(self) -> list[SamsaraVehicle]:
         rows = self._paged("/fleet/vehicles", {"limit": 512})
         return [SamsaraVehicle(id=str(r["id"]), name=r.get("name"),
@@ -439,3 +443,21 @@ def make_client() -> SamsaraClient:
             "Samsara sync. Nothing is synced or invented without it."
         )
     return SamsaraClient(token)
+
+
+def client_for(token: str) -> SamsaraClient:
+    return SamsaraClient(token)
+
+
+def check_token(token: str) -> tuple[bool, str | None]:
+    """Validate a Samsara API token. Returns (ok, error_message)."""
+    try:
+        SamsaraClient(token).ping()
+        return True, None
+    except httpx.HTTPStatusError as e:
+        code = e.response.status_code
+        if code in (401, 403):
+            return False, "Samsara rejected this token — use an API token with fleet read access."
+        return False, f"Samsara returned HTTP {code}."
+    except httpx.HTTPError as e:
+        return False, f"Couldn't reach Samsara ({type(e).__name__})."

@@ -361,21 +361,24 @@ export function AppShell({ title, children }: { title: string; children: React.R
           ))}
         </nav>
         <div className="border-t border-white/10 px-5 py-4">
-          {user.carrier_name ? (
-            <>
-              <p className="truncate text-sm font-semibold text-white">{user.carrier_name}</p>
-              <p className="truncate text-xs text-white/50">
-                {[user.mc_number && `MC ${user.mc_number}`, user.dot_number && `DOT ${user.dot_number}`]
-                  .filter(Boolean).join(" · ") || user.role.replace("_", " ")}
-              </p>
-              <p className="mt-0.5 truncate text-xs text-white/50">{user.full_name}</p>
-            </>
-          ) : (
-            <>
-              <p className="truncate text-sm font-semibold text-white">{user.full_name}</p>
-              <p className="text-xs text-white/50">{user.role.replace("_", " ")}</p>
-            </>
-          )}
+          <Link href="/profile" className="-mx-2 block rounded-lg px-2 py-1.5 transition-colors hover:bg-white/10">
+            {user.carrier_name ? (
+              <>
+                <p className="truncate text-sm font-semibold text-white">{user.carrier_name}</p>
+                <p className="truncate text-xs text-white/50">
+                  {[user.mc_number && `MC ${user.mc_number}`, user.dot_number && `DOT ${user.dot_number}`]
+                    .filter(Boolean).join(" · ") || user.role.replace("_", " ")}
+                </p>
+                <p className="mt-0.5 truncate text-xs text-white/50">{user.full_name}</p>
+              </>
+            ) : (
+              <>
+                <p className="truncate text-sm font-semibold text-white">{user.full_name}</p>
+                <p className="text-xs text-white/50">{user.role.replace("_", " ")}</p>
+              </>
+            )}
+            <p className="mt-1 text-xs font-medium text-white/70">Profile &amp; integrations →</p>
+          </Link>
           <button
             onClick={signOut}
             className="mt-3 w-full rounded-lg border border-white/20 px-3.5 py-1.5 text-sm font-semibold text-white/85 transition-colors hover:border-white/50 hover:text-white"

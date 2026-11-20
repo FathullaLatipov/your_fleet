@@ -86,6 +86,33 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class Integration(Base):
+    """A carrier's own API credential for a third-party provider (Samsara, …).
+
+    Each company connects its own token, so sync runs per-tenant. The token is
+    stored encrypted (app.services.crypto); only a last-4 preview is kept in
+    clear for display. One row per (owner, provider)."""
+    __tablename__ = "integrations"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    provider: Mapped[str] = mapped_column(String(32))  # samsara | ringcentral | fuel
+    token_encrypted: Mapped[str | None] = mapped_column(Text)
+    token_last4: Mapped[str | None] = mapped_column(String(8))
+    status: Mapped[str] = mapped_column(String(16), default="disconnected")  # connected|error|disconnected
+    last_error: Mapped[str | None] = mapped_column(Text)
+    last_checked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    connected_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "provider", name="uq_integration_owner_provider"),
+    )
+
+
 # ---------------------------------------------------------------- businesses
 
 class BusinessCategory(str, enum.Enum):

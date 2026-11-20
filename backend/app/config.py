@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+psycopg://postgres:postgres@localhost:5432/yourfleet_dev"
     jwt_secret: str = "dev-only-insecure-secret"
     jwt_expires_minutes: int = 1440
+    # Key for encrypting stored integration tokens (Samsara, …). Falls back to
+    # jwt_secret when unset; set a dedicated value in production.
+    integrations_secret: str = ""
     cors_origins: str = "http://localhost:3000"
     environment: str = "development"
     media_dir: str = "media"

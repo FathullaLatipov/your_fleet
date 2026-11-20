@@ -106,44 +106,75 @@ def cmd_sync_samsara(args: argparse.Namespace) -> int:
 
 
 def cmd_samsara_loop(args: argparse.Namespace) -> int:
-    """Keep odometer/GPS fresh: sync SAMSARA_SYNC_OWNER every --interval seconds.
+    """Keep odometer/GPS/fuel fresh for EVERY connected company every --interval
+    seconds. Each carrier that connected its own token in Profile -> Integrations
+    is synced with that token; the legacy SAMSARA_SYNC_OWNER + SAMSARA_API_TOKEN
+    env pair is kept as a fallback for a company that hasn't connected in-app.
 
-    Idles (instead of crash-looping the container) while the token or the
-    owner isn't configured, so the service can ship before it's switched on.
+    Idles (instead of crash-looping) while nothing is connected, so the service
+    can ship before any tenant is switched on.
     """
     import os
     import time
     from datetime import datetime, timezone
 
-    from app.services.samsara import make_client, sync_samsara
+    from sqlalchemy import select
 
-    owner_email = (args.owner_email or os.environ.get("SAMSARA_SYNC_OWNER", "")).strip()
-    sclient = None
+    from app.models import Integration, User
+    from app.services import crypto
+    from app.services.samsara import SamsaraClient, sync_samsara
+
+    env_owner_email = (args.owner_email or os.environ.get("SAMSARA_SYNC_OWNER", "")).strip()
+    env_token = os.environ.get("SAMSARA_API_TOKEN", "").strip()
+
     while True:
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-        if not owner_email:
-            print(f"[{stamp}] samsara-loop idle: SAMSARA_SYNC_OWNER is not set", flush=True)
-        else:
-            try:
-                sclient = sclient or make_client()
-                with SessionLocal() as db:
-                    owner = _find_user(db, owner_email)
-                    if owner is not None:
+        try:
+            with SessionLocal() as db:
+                # (owner, client, source) per tenant to sync.
+                targets: list[tuple[User, SamsaraClient, str]] = []
+                seen: set = set()
+                rows = db.execute(
+                    select(Integration).where(
+                        Integration.provider == "samsara",
+                        Integration.status == "connected",
+                    )
+                ).scalars().all()
+                for r in rows:
+                    token = crypto.decrypt(r.token_encrypted)
+                    owner = db.get(User, r.owner_user_id)
+                    if not token or owner is None:
+                        continue
+                    targets.append((owner, SamsaraClient(token), "integration"))
+                    seen.add(owner.id)
+                # Legacy env fallback (only if that owner hasn't connected in-app).
+                if env_owner_email and env_token:
+                    owner = _find_user(db, env_owner_email)
+                    if owner is not None and owner.id not in seen:
+                        targets.append((owner, SamsaraClient(env_token), "env"))
+
+                if not targets:
+                    print(f"[{stamp}] samsara-loop idle: no company has connected a token", flush=True)
+                for owner, client, source in targets:
+                    try:
                         report = sync_samsara(
                             db, owner,
-                            vehicles_fn=sclient.vehicles, stats_fn=sclient.stats,
-                            defects_fn=sclient.open_defects, faults_fn=sclient.faults,
+                            vehicles_fn=client.vehicles, stats_fn=client.stats,
+                            defects_fn=client.open_defects, faults_fn=client.faults,
                             create_missing=args.create_missing,
                         )
                         d = report.as_dict()
-                        print(f"[{stamp}] samsara sync {owner_email}: matched={d['vehicles_matched']} "
-                              f"created={d['vehicles_created']} odometers={d['odometers_updated']} "
-                              f"fuel={d['fuel_updated']} engine_hours={d['engine_hours_updated']} "
-                              f"faults_active={d['faults_active']} faults_cleared={d['faults_cleared']} "
-                              f"defects={d['defects_created']}"
+                        print(f"[{stamp}] samsara sync {owner.email} ({source}): "
+                              f"matched={d['vehicles_matched']} created={d['vehicles_created']} "
+                              f"odometers={d['odometers_updated']} fuel={d['fuel_updated']} "
+                              f"engine_hours={d['engine_hours_updated']} faults_active={d['faults_active']} "
+                              f"faults_cleared={d['faults_cleared']} defects={d['defects_created']}"
                               + (f" note={d['defects_note']}" if d["defects_note"] else ""), flush=True)
-            except Exception as e:  # noqa: BLE001 - keep the loop alive, log the cause
-                print(f"[{stamp}] samsara sync failed: {type(e).__name__}: {e}", flush=True)
+                    except Exception as e:  # noqa: BLE001 - one tenant's failure mustn't stop others
+                        print(f"[{stamp}] samsara sync {owner.email} failed: "
+                              f"{type(e).__name__}: {e}", flush=True)
+        except Exception as e:  # noqa: BLE001 - keep the loop alive, log the cause
+            print(f"[{stamp}] samsara-loop error: {type(e).__name__}: {e}", flush=True)
         time.sleep(args.interval)
 
 

@@ -558,3 +558,21 @@ class DuplicateCandidateOut(ORMModel):
 class Paginated(BaseModel):
     total: int
     items: list
+
+
+# ---------------------------------------------------------------- integrations
+
+class IntegrationOut(BaseModel):
+    provider: str
+    label: str
+    description: str
+    status: str                 # connected | error | disconnected | unavailable
+    available: bool             # False for providers not wired up yet (coming soon)
+    token_last4: str | None = None
+    last_error: str | None = None
+    last_checked_at: datetime | None = None
+    connected_at: datetime | None = None
+
+
+class IntegrationTokenIn(BaseModel):
+    token: str = Field(min_length=8, max_length=4096)
