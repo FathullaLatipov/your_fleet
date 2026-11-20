@@ -18,6 +18,7 @@ import {
 import { ApiError, api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import {
+  EXPENSE_LABELS,
   fmtUsd,
   type BusinessListItem,
   type Defect,
@@ -38,7 +39,7 @@ interface ShopOptions {
   options: BusinessListItem[];
 }
 
-type Tab = "overview" | "maintenance" | "defects" | "docs" | "faults" | "loan" | "history";
+type Tab = "overview" | "drivers" | "mileage" | "expenses" | "maintenance" | "defects" | "docs" | "faults" | "loan" | "history";
 
 /* Engine fault codes from Samsara for one truck (Active + recently cleared). */
 function FaultsTab({ vehicleId, onCount }: { vehicleId: string; onCount: (n: number) => void }) {
@@ -452,6 +453,12 @@ function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () 
       notes: v.notes ?? "",
       insurance: v.insurance_expires_at ? v.insurance_expires_at.slice(0, 10) : "",
       inspection: v.inspection_expires_at ? v.inspection_expires_at.slice(0, 10) : "",
+      registration: v.registration_expires_at ? v.registration_expires_at.slice(0, 10) : "",
+      purchase_price: v.purchase_price_cents != null ? String(v.purchase_price_cents / 100) : "",
+      purchase_date: v.purchase_date ? v.purchase_date.slice(0, 10) : "",
+      odometer_at_purchase: v.odometer_at_purchase != null ? String(v.odometer_at_purchase) : "",
+      salvage_value: v.salvage_value_cents != null ? String(v.salvage_value_cents / 100) : "",
+      useful_life_months: v.useful_life_months != null ? String(v.useful_life_months) : "",
     });
     setEdit(true);
   }
@@ -475,6 +482,13 @@ function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () 
           notes: f.notes || null,
           insurance_expires_at: f.insurance ? new Date(f.insurance).toISOString() : null,
           inspection_expires_at: f.inspection ? new Date(f.inspection).toISOString() : null,
+          registration_expires_at: f.registration ? new Date(f.registration).toISOString() : null,
+          purchase_price_cents: f.purchase_price ? Math.round(Number(f.purchase_price) * 100) : null,
+          purchase_date: f.purchase_date ? new Date(f.purchase_date).toISOString() : null,
+          odometer_at_purchase: f.odometer_at_purchase ? Number(f.odometer_at_purchase) : null,
+          salvage_value_cents: f.salvage_value ? Math.round(Number(f.salvage_value) * 100) : null,
+          useful_life_months: f.useful_life_months ? Number(f.useful_life_months) : null,
+          depreciation_method: f.useful_life_months ? "straight_line" : null,
         },
       });
       setEdit(false);
@@ -496,6 +510,10 @@ function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () 
     ["Tags", v.tags],
     ["Insurance until", v.insurance_expires_at ? new Date(v.insurance_expires_at).toLocaleDateString() : null],
     ["Inspection until", v.inspection_expires_at ? new Date(v.inspection_expires_at).toLocaleDateString() : null],
+    ["Registration until", v.registration_expires_at ? new Date(v.registration_expires_at).toLocaleDateString() : null],
+    ["Purchase cost", v.purchase_price_cents != null ? fmtUsd(v.purchase_price_cents) : null],
+    ["Purchase date", v.purchase_date ? new Date(v.purchase_date).toLocaleDateString() : null],
+    ["Useful life", v.useful_life_months != null ? `${v.useful_life_months} months` : null],
   ];
 
   return (
@@ -561,6 +579,42 @@ function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () 
             <input id="td-insp" type="date" className="field mt-1" value={f.inspection}
                    onChange={(e) => setF({ ...f, inspection: e.target.value })} />
           </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-reg">Registration until</label>
+            <input id="td-reg" type="date" className="field mt-1" value={f.registration ?? ""}
+                   onChange={(e) => setF({ ...f, registration: e.target.value })} />
+          </div>
+
+          {/* Purchase & depreciation (feeds the monthly/net-book-value numbers) */}
+          <p className="mt-2 text-xs font-semibold uppercase tracking-wide text-faint sm:col-span-3">
+            Purchase &amp; depreciation
+          </p>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-pp">Purchase price ($)</label>
+            <input id="td-pp" className="field mt-1" inputMode="decimal" placeholder="85000"
+                   value={f.purchase_price ?? ""} onChange={(e) => setF({ ...f, purchase_price: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-pd">Purchase date</label>
+            <input id="td-pd" type="date" className="field mt-1" value={f.purchase_date ?? ""}
+                   onChange={(e) => setF({ ...f, purchase_date: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-oap">Odometer at purchase</label>
+            <input id="td-oap" className="field mt-1" inputMode="numeric" placeholder="120000"
+                   value={f.odometer_at_purchase ?? ""} onChange={(e) => setF({ ...f, odometer_at_purchase: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-sv">Salvage value ($)</label>
+            <input id="td-sv" className="field mt-1" inputMode="decimal" placeholder="0"
+                   value={f.salvage_value ?? ""} onChange={(e) => setF({ ...f, salvage_value: e.target.value })} />
+          </div>
+          <div>
+            <label className="text-sm font-medium text-steel" htmlFor="td-ul">Useful life (months)</label>
+            <input id="td-ul" className="field mt-1" inputMode="numeric" placeholder="72"
+                   value={f.useful_life_months ?? ""} onChange={(e) => setF({ ...f, useful_life_months: e.target.value })} />
+          </div>
+
           <div className="sm:col-span-3">
             <label className="text-sm font-medium text-steel" htmlFor="td-notes">Notes</label>
             <textarea id="td-notes" className="field mt-1" maxLength={5000} value={f.notes}
@@ -577,6 +631,266 @@ function TruckDetails({ v, onSaved, editSignal = 0 }: { v: Vehicle; onSaved: () 
 }
 
 /* ------------------------------------------------------------------ */
+
+const fmtMonth = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "—";
+const fmtDate = (iso: string | null) =>
+  iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "—";
+
+/* Driver History: dated assignments (Driver / From / To) + assign a new one. */
+function DriverHistoryTab({ d, vehicleId, onChange }:
+  { d: VehicleDetail; vehicleId: string; onChange: () => void }) {
+  const [name, setName] = useState("");
+  const [start, setStart] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const rows = d.driver_assignments;
+
+  const assign = async () => {
+    if (!name.trim()) return;
+    setBusy(true); setErr(null);
+    try {
+      await api(`/api/fleet/vehicles/${vehicleId}/driver-assignments`, {
+        method: "POST",
+        body: { driver_name: name.trim(), start_date: start ? new Date(start).toISOString() : undefined },
+      });
+      setName(""); setStart(""); onChange();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't assign"); }
+    finally { setBusy(false); }
+  };
+  const end = async (id: string) => {
+    try {
+      await api(`/api/fleet/vehicles/${vehicleId}/driver-assignments/${id}/end`, { method: "POST" });
+      onChange();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't end"); }
+  };
+
+  return (
+    <section className="card p-5">
+      <h2 className="text-lg font-bold">Driver Assignment History</h2>
+      <p className="mt-0.5 text-sm text-steel">
+        Every driver who operated this truck, kept as dated records. The open one is the current driver.
+      </p>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-steel">
+              <th className="py-2 pr-3 font-semibold">Driver</th>
+              <th className="py-2 pr-3 font-semibold">From</th>
+              <th className="py-2 pr-3 font-semibold">To</th>
+              <th className="py-2 font-semibold"></th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length === 0 ? (
+              <tr><td colSpan={4} className="py-6 text-center text-faint">No driver assignments yet.</td></tr>
+            ) : rows.map((a) => (
+              <tr key={a.id} className="border-b border-line/60">
+                <td className="py-2.5 pr-3 font-medium">{a.driver_name}</td>
+                <td className="py-2.5 pr-3 text-steel">{fmtMonth(a.start_date)}</td>
+                <td className="py-2.5 pr-3">
+                  {a.end_date
+                    ? <span className="text-steel">{fmtMonth(a.end_date)}</span>
+                    : <span className="rounded-full bg-pine-wash px-2 py-0.5 text-xs font-semibold text-pine">Current</span>}
+                </td>
+                <td className="py-2.5 text-right">
+                  {!a.end_date && (
+                    <button onClick={() => end(a.id)} className="text-xs font-semibold text-steel hover:text-danger">
+                      End
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-5 flex flex-wrap items-end gap-2 border-t border-line pt-4">
+        <label className="text-sm">
+          <span className="mb-1 block text-xs font-semibold text-steel">New driver</span>
+          <input className="field !py-2" placeholder="Driver name" value={name}
+                 onChange={(e) => setName(e.target.value)} />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-xs font-semibold text-steel">Start date</span>
+          <input type="date" className="field !py-2" value={start} onChange={(e) => setStart(e.target.value)} />
+        </label>
+        <button onClick={assign} disabled={busy || !name.trim()} className="btn !py-2">
+          {busy ? "Assigning…" : "Assign driver"}
+        </button>
+      </div>
+      {err && <p className="mt-2 text-sm font-medium text-danger">{err}</p>}
+    </section>
+  );
+}
+
+/* Mileage History: dated odometer readings + add one. */
+function MileageHistoryTab({ d, vehicleId, onChange }:
+  { d: VehicleDetail; vehicleId: string; onChange: () => void }) {
+  const [miles, setMiles] = useState("");
+  const [when, setWhen] = useState("");
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const v = d.vehicle;
+  const total = v.odometer_miles != null && v.odometer_at_purchase != null
+    ? Math.max(Math.round(v.odometer_miles - v.odometer_at_purchase), 0) : null;
+
+  const add = async () => {
+    if (!miles) return;
+    setBusy(true); setErr(null);
+    try {
+      await api(`/api/fleet/vehicles/${vehicleId}/odometer-readings`, {
+        method: "POST",
+        body: { miles: Number(miles), recorded_at: when ? new Date(when).toISOString() : undefined,
+                note: note.trim() || undefined },
+      });
+      setMiles(""); setWhen(""); setNote(""); onChange();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't add"); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <section className="card p-5">
+      <h2 className="text-lg font-bold">Mileage History</h2>
+      <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
+        {([
+          ["Current", v.odometer_miles != null ? Math.round(v.odometer_miles).toLocaleString() + " mi" : "—"],
+          ["At purchase", v.odometer_at_purchase != null ? Math.round(v.odometer_at_purchase).toLocaleString() + " mi" : "—"],
+          ["Total driven", total != null ? total.toLocaleString() + " mi" : "—"],
+          ["Last update", fmtDate(v.odometer_updated_at)],
+        ] as [string, string][]).map(([l, val]) => (
+          <div key={l}>
+            <p className="text-xs font-semibold uppercase tracking-wide text-faint">{l}</p>
+            <p className="mt-0.5 text-sm font-semibold tabular-nums">{val}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <table className="w-full border-collapse text-sm">
+          <thead>
+            <tr className="border-b border-line text-left text-steel">
+              <th className="py-2 pr-3 font-semibold">Date</th>
+              <th className="py-2 pr-3 text-right font-semibold">Odometer</th>
+              <th className="py-2 pr-3 font-semibold">Source</th>
+              <th className="py-2 font-semibold">Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            {d.odometer_readings.length === 0 ? (
+              <tr><td colSpan={4} className="py-6 text-center text-faint">No readings logged yet.</td></tr>
+            ) : d.odometer_readings.map((r) => (
+              <tr key={r.id} className="border-b border-line/60">
+                <td className="py-2.5 pr-3 text-steel">{fmtDate(r.recorded_at)}</td>
+                <td className="py-2.5 pr-3 text-right font-medium tabular-nums">{Math.round(r.miles).toLocaleString()} mi</td>
+                <td className="py-2.5 pr-3 text-steel capitalize">{r.source}</td>
+                <td className="py-2.5 text-steel">{r.note ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-5 flex flex-wrap items-end gap-2 border-t border-line pt-4">
+        <label className="text-sm">
+          <span className="mb-1 block text-xs font-semibold text-steel">Odometer</span>
+          <input className="field !w-32 !py-2" inputMode="numeric" placeholder="Miles" value={miles}
+                 onChange={(e) => setMiles(e.target.value)} />
+        </label>
+        <label className="text-sm">
+          <span className="mb-1 block text-xs font-semibold text-steel">Date</span>
+          <input type="date" className="field !py-2" value={when} onChange={(e) => setWhen(e.target.value)} />
+        </label>
+        <label className="min-w-[8rem] flex-1 text-sm">
+          <span className="mb-1 block text-xs font-semibold text-steel">Note</span>
+          <input className="field !py-2" placeholder="Optional" value={note} onChange={(e) => setNote(e.target.value)} />
+        </label>
+        <button onClick={add} disabled={busy || !miles} className="btn !py-2">
+          {busy ? "Adding…" : "Add reading"}
+        </button>
+      </div>
+      {err && <p className="mt-2 text-sm font-medium text-danger">{err}</p>}
+    </section>
+  );
+}
+
+/* Expenses & Depreciation: the derived depreciation summary + expense ledger. */
+function ExpensesDepreciationTab({ d }: { d: VehicleDetail }) {
+  const dep = d.depreciation;
+  const depRows: [string, string][] = [
+    ["Purchase price", dep.purchase_price_cents != null ? fmtUsd(dep.purchase_price_cents) : "—"],
+    ["Salvage value", fmtUsd(dep.salvage_value_cents)],
+    ["Useful life", dep.useful_life_months != null ? `${dep.useful_life_months} months` : "—"],
+    ["Method", dep.method === "straight_line" ? "Straight-line" : dep.method],
+    ["Monthly depreciation", dep.monthly_cents != null ? fmtUsd(dep.monthly_cents) : "—"],
+    ["Annual depreciation", dep.annual_cents != null ? fmtUsd(dep.annual_cents) : "—"],
+    ["Accumulated", dep.accumulated_cents != null ? fmtUsd(dep.accumulated_cents) : "—"],
+    ["Net book value", dep.net_book_value_cents != null ? fmtUsd(dep.net_book_value_cents) : "—"],
+  ];
+  const total = Object.values(d.expenses_by_category).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="space-y-4">
+      <section className="card p-5">
+        <h2 className="text-lg font-bold">Depreciation</h2>
+        {dep.purchase_price_cents == null || dep.useful_life_months == null ? (
+          <p className="mt-2 text-sm text-steel">
+            Add the purchase price and useful life in <span className="font-semibold">General Information</span> to
+            see monthly depreciation and net book value.
+          </p>
+        ) : (
+          <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
+            {depRows.map(([l, val]) => (
+              <div key={l}>
+                <dt className="text-xs font-semibold uppercase tracking-wide text-faint">{l}</dt>
+                <dd className="mt-0.5 text-sm font-semibold tabular-nums">{val}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </section>
+
+      <section className="card p-5">
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-lg font-bold">Expenses</h2>
+          <span className="text-sm text-steel">Total {fmtUsd(total)}</span>
+        </div>
+        {Object.keys(d.expenses_by_category).length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {Object.entries(d.expenses_by_category).map(([cat, cents]) => (
+              <span key={cat} className="rounded-full bg-mist px-2.5 py-1 text-xs font-semibold text-steel">
+                {EXPENSE_LABELS[cat] ?? cat}: {fmtUsd(cents)}
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-line text-left text-steel">
+                <th className="py-2 pr-3 font-semibold">Date</th>
+                <th className="py-2 pr-3 font-semibold">Category</th>
+                <th className="py-2 pr-3 font-semibold">Description</th>
+                <th className="py-2 text-right font-semibold">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {d.expenses.length === 0 ? (
+                <tr><td colSpan={4} className="py-6 text-center text-faint">No expenses recorded.</td></tr>
+              ) : d.expenses.map((e) => (
+                <tr key={e.id} className="border-b border-line/60">
+                  <td className="py-2.5 pr-3 text-steel">{fmtDate(e.incurred_at)}</td>
+                  <td className="py-2.5 pr-3">{EXPENSE_LABELS[e.category] ?? e.category}</td>
+                  <td className="py-2.5 pr-3">{e.description}</td>
+                  <td className="py-2.5 text-right font-medium tabular-nums">{fmtUsd(e.amount_cents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
+}
 
 function VehicleInner() {
   const { id } = useParams<{ id: string }>();
@@ -664,13 +978,16 @@ function VehicleInner() {
   }
 
   const TABS: [Tab, string, number | string | null][] = [
-    ["overview", "Overview", null],
+    ["overview", "General Information", null],
+    ["drivers", "Driver History", d.driver_assignments.length || null],
+    ["mileage", "Mileage History", null],
+    ["expenses", "Expenses & Depreciation", null],
+    ["loan", "Lease / Loan", null],
     ["maintenance", "Maintenance", dueCount || null],
     ["defects", "PTI defects", openDefects || null],
     ["docs", "Documents", null],
     ["faults", "Fault codes", faultCount || null],
-    ["loan", "Loan schedule", null],
-    ["history", "History", d.bookings.length || null],
+    ["history", "Bookings", d.bookings.length || null],
   ];
 
   return (
@@ -732,6 +1049,23 @@ function VehicleInner() {
             </form>
           </div>
         </div>
+
+        {/* Summary grid — the key identity, driver and financial facts at a glance. */}
+        <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4 border-t border-line pt-4 sm:grid-cols-3">
+          {([
+            ["VIN Number", v.vin ? <span className="font-mono">{v.vin}</span> : "—"],
+            ["Year", v.year ?? "—"],
+            ["Current Driver", d.current_driver ?? "—"],
+            ["Purchase Cost", v.purchase_price_cents != null ? fmtUsd(v.purchase_price_cents) : "—"],
+            ["Monthly Depreciation", d.depreciation.monthly_cents != null ? fmtUsd(d.depreciation.monthly_cents) : "—"],
+            ["Net Book Value", d.depreciation.net_book_value_cents != null ? fmtUsd(d.depreciation.net_book_value_cents) : "—"],
+          ] as [string, React.ReactNode][]).map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs font-semibold uppercase tracking-wide text-faint">{label}</dt>
+              <dd className="mt-0.5 text-sm font-semibold text-ink">{value}</dd>
+            </div>
+          ))}
+        </dl>
         {(() => {
           /* Clickable alerts: each chip jumps to the place where it's fixed. */
           const alerts: { key: string; text: string; tone: "danger" | "amber"; go: () => void }[] = [];
@@ -809,6 +1143,9 @@ function VehicleInner() {
 
       <div className="mt-5 space-y-5">
         {tab === "overview" && <TruckDetails v={v} onSaved={load} editSignal={editSignal} />}
+        {tab === "drivers" && <DriverHistoryTab d={d} vehicleId={id} onChange={load} />}
+        {tab === "mileage" && <MileageHistoryTab d={d} vehicleId={id} onChange={load} />}
+        {tab === "expenses" && <ExpensesDepreciationTab d={d} />}
 
         {tab === "maintenance" && (
           <section className="card p-5">

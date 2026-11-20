@@ -1,7 +1,7 @@
 """Fleet / TMS endpoints for carriers: vehicles, maintenance schedules,
 per-truck expenses, PTI defects, and defect -> nearby-shop price options."""
 import uuid
-from datetime import timedelta
+from datetime import timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -13,8 +13,11 @@ from app.models import (
     Booking,
     BookingStatus,
     DefectStatus,
+    DriverAssignment,
+    FleetDriver,
     InspectionDefect,
     MaintenanceSchedule,
+    OdometerReading,
     User,
     UserRole,
     Vehicle,
@@ -27,9 +30,14 @@ from app.schemas import (
     BusinessListItem,
     DefectIn,
     DefectOut,
+    DepreciationOut,
+    DriverAssignmentIn,
+    DriverAssignmentOut,
     ExpenseIn,
     ExpenseOut,
     OdometerIn,
+    OdometerReadingIn,
+    OdometerReadingOut,
     ScheduleDoneIn,
     ScheduleIn,
     ScheduleOut,
@@ -39,6 +47,7 @@ from app.schemas import (
     VehicleUpdateIn,
 )
 from app.security import require_roles
+from app.services import depreciation as depreciation_svc
 from app.services.fleet_links import link_operator, link_trailer
 from app.services.geo import SearchFilters, search_businesses
 from app.services.maintenance import check_vehicle_maintenance, schedule_status
@@ -175,12 +184,105 @@ def update_odometer(vehicle_id: uuid.UUID, body: OdometerIn,
     if v.odometer_miles is not None and body.odometer_miles < v.odometer_miles:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY,
                             "Odometer can't go backwards")
+    now = utcnow()
     v.odometer_miles = body.odometer_miles
-    v.odometer_updated_at = utcnow()
+    v.odometer_updated_at = now
     v.odometer_source = "manual"
+    db.add(OdometerReading(vehicle_id=v.id, miles=body.odometer_miles,
+                           recorded_at=now, source="manual"))
     check_vehicle_maintenance(db, v)
     db.commit()
     return _vehicle_out(db, v)
+
+
+# -------------------------------------------------- driver assignment history
+
+@router.get("/vehicles/{vehicle_id}/driver-assignments",
+            response_model=list[DriverAssignmentOut])
+def list_driver_assignments(vehicle_id: uuid.UUID, user: User = Depends(fleet_user),
+                            db: Session = Depends(get_db)):
+    _own_vehicle(vehicle_id, user, db)
+    rows = db.execute(
+        select(DriverAssignment).where(DriverAssignment.vehicle_id == vehicle_id)
+        .order_by(DriverAssignment.start_date.desc(), DriverAssignment.created_at.desc())
+    ).scalars().all()
+    return [DriverAssignmentOut.model_validate(a) for a in rows]
+
+
+@router.post("/vehicles/{vehicle_id}/driver-assignments",
+             response_model=DriverAssignmentOut, status_code=201)
+def assign_driver(vehicle_id: uuid.UUID, body: DriverAssignmentIn,
+                  user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    """Start a new assignment. Closes the current open one (end = new start) and
+    sets the truck's current driver, so history is never overwritten."""
+    v = _own_vehicle(vehicle_id, user, db)
+    name = (body.driver_name or "").strip()
+    if body.driver_id is not None:
+        driver = db.get(FleetDriver, body.driver_id)
+        if driver is None or driver.owner_user_id != user.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Driver not found")
+        name = name or driver.name
+    if not name:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Driver name is required")
+    start = body.start_date or utcnow()
+    open_rows = db.execute(
+        select(DriverAssignment).where(
+            DriverAssignment.vehicle_id == v.id, DriverAssignment.end_date.is_(None))
+    ).scalars().all()
+    for a in open_rows:
+        a.end_date = start
+    row = DriverAssignment(vehicle_id=v.id, driver_id=body.driver_id, driver_name=name,
+                           start_date=start, note=body.note)
+    db.add(row)
+    v.operator_name = name  # keep the single current-driver field in sync
+    link_operator(db, v, None)
+    db.commit()
+    db.refresh(row)
+    return DriverAssignmentOut.model_validate(row)
+
+
+@router.post("/vehicles/{vehicle_id}/driver-assignments/{assignment_id}/end",
+             response_model=DriverAssignmentOut)
+def end_driver_assignment(vehicle_id: uuid.UUID, assignment_id: uuid.UUID,
+                          user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    v = _own_vehicle(vehicle_id, user, db)
+    row = db.get(DriverAssignment, assignment_id)
+    if row is None or row.vehicle_id != v.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Assignment not found")
+    if row.end_date is None:
+        row.end_date = utcnow()
+        if v.operator_name == row.driver_name:
+            v.operator_name = None
+    db.commit()
+    db.refresh(row)
+    return DriverAssignmentOut.model_validate(row)
+
+
+# ------------------------------------------------------- mileage history
+
+@router.post("/vehicles/{vehicle_id}/odometer-readings",
+             response_model=OdometerReadingOut, status_code=201)
+def add_odometer_reading(vehicle_id: uuid.UUID, body: OdometerReadingIn,
+                         user: User = Depends(fleet_user), db: Session = Depends(get_db)):
+    """Log a dated odometer reading. Updates the truck's current odometer only
+    when this reading is the newest one."""
+    v = _own_vehicle(vehicle_id, user, db)
+    recorded = body.recorded_at or utcnow()
+    row = OdometerReading(vehicle_id=v.id, miles=body.miles, recorded_at=recorded,
+                          source="manual", note=body.note)
+    db.add(row)
+    last = v.odometer_updated_at
+    if last is not None and last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    rec = recorded if recorded.tzinfo else recorded.replace(tzinfo=timezone.utc)
+    if last is None or rec >= last:
+        v.odometer_miles = body.miles
+        v.odometer_updated_at = recorded
+        v.odometer_source = "manual"
+        check_vehicle_maintenance(db, v)
+    db.commit()
+    db.refresh(row)
+    return OdometerReadingOut.model_validate(row)
 
 
 @router.get("/vehicles/{vehicle_id}", response_model=VehicleDetailOut)
@@ -218,6 +320,16 @@ def vehicle_detail(vehicle_id: uuid.UUID, user: User = Depends(fleet_user),
         select(Booking).where(Booking.vehicle_id == v.id)
         .order_by(Booking.created_at.desc()).limit(100)
     ).scalars().all()
+    assignments = db.execute(
+        select(DriverAssignment).where(DriverAssignment.vehicle_id == v.id)
+        .order_by(DriverAssignment.start_date.desc(), DriverAssignment.created_at.desc())
+    ).scalars().all()
+    current_driver = next((a.driver_name for a in assignments if a.end_date is None), v.operator_name)
+    readings = db.execute(
+        select(OdometerReading).where(OdometerReading.vehicle_id == v.id)
+        .order_by(OdometerReading.recorded_at.desc()).limit(300)
+    ).scalars().all()
+    dep = depreciation_svc.compute(v)
     return VehicleDetailOut(
         vehicle=_vehicle_out(db, v),
         schedules=sched_out,
@@ -225,6 +337,10 @@ def vehicle_detail(vehicle_id: uuid.UUID, user: User = Depends(fleet_user),
         expenses_by_category={c.value: int(total) for c, total in by_cat_rows},
         defects=d_out,
         bookings=[BookingOut.model_validate(b) for b in bookings],
+        depreciation=DepreciationOut(**dep.as_dict()),
+        current_driver=current_driver,
+        driver_assignments=[DriverAssignmentOut.model_validate(a) for a in assignments],
+        odometer_readings=[OdometerReadingOut.model_validate(r) for r in readings],
     )
 
 

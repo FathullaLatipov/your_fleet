@@ -268,6 +268,7 @@ class VehicleStatus(str, enum.Enum):
     ACTIVE = "active"
     IN_REPAIR = "in_repair"
     INACTIVE = "inactive"
+    SOLD = "sold"
 
 
 class Vehicle(Base):
@@ -295,6 +296,15 @@ class Vehicle(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     insurance_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     inspection_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    registration_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Purchase & depreciation inputs. Monthly/accumulated depreciation and net
+    # book value are DERIVED (app.services.depreciation), never stored.
+    purchase_price_cents: Mapped[int | None] = mapped_column(Integer)
+    purchase_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    odometer_at_purchase: Mapped[float | None] = mapped_column(Float)
+    salvage_value_cents: Mapped[int | None] = mapped_column(Integer)      # residual value
+    useful_life_months: Mapped[int | None] = mapped_column(Integer)       # straight-line life
+    depreciation_method: Mapped[str | None] = mapped_column(String(24))   # straight_line
     status: Mapped[VehicleStatus] = mapped_column(
         str_enum(VehicleStatus), default=VehicleStatus.ACTIVE
     )
@@ -317,6 +327,43 @@ class Vehicle(Base):
     __table_args__ = (
         UniqueConstraint("owner_user_id", "unit_number", name="uq_vehicle_unit"),
     )
+
+
+class DriverAssignment(Base):
+    """A driver's tenure on a truck, kept as a dated historical record so a
+    truck's whole driver history is preserved. The open assignment (end_date
+    is NULL) is the current driver; a new assignment closes the previous one."""
+
+    __tablename__ = "driver_assignments"
+
+    id: Mapped[uuid.UUID] = pk()
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("vehicles.id", ondelete="CASCADE"), index=True)
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("fleet_drivers.id", ondelete="SET NULL"))
+    driver_name: Mapped[str] = mapped_column(String(128))
+    start_date: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    end_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+    __table_args__ = (Index("ix_driver_assignment_vehicle_open", "vehicle_id", "end_date"),)
+
+
+class OdometerReading(Base):
+    """A dated odometer reading. The truck's current odometer is the latest
+    reading; keeping each one preserves a mileage history over time."""
+
+    __tablename__ = "odometer_readings"
+
+    id: Mapped[uuid.UUID] = pk()
+    vehicle_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("vehicles.id", ondelete="CASCADE"), index=True)
+    miles: Mapped[float] = mapped_column(Float)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    source: Mapped[str] = mapped_column(String(16), default="manual")  # manual | samsara | import
+    note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class VehicleEngineFault(Base):

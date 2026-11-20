@@ -220,7 +220,14 @@ export interface Vehicle {
   notes: string | null;
   insurance_expires_at: string | null;
   inspection_expires_at: string | null;
-  status: "active" | "in_repair" | "inactive";
+  registration_expires_at: string | null;
+  purchase_price_cents: number | null;
+  purchase_date: string | null;
+  odometer_at_purchase: number | null;
+  salvage_value_cents: number | null;
+  useful_life_months: number | null;
+  depreciation_method: string | null;
+  status: "active" | "in_repair" | "inactive" | "sold";
   odometer_miles: number | null;
   odometer_updated_at: string | null;
   odometer_source: string | null;
@@ -270,6 +277,35 @@ export interface Defect {
   suggested_service_slug: string | null;
 }
 
+export interface Depreciation {
+  method: string;
+  purchase_price_cents: number | null;
+  salvage_value_cents: number;
+  useful_life_months: number | null;
+  monthly_cents: number | null;
+  annual_cents: number | null;
+  months_elapsed: number | null;
+  accumulated_cents: number | null;
+  net_book_value_cents: number | null;
+}
+
+export interface DriverAssignment {
+  id: string;
+  driver_id: string | null;
+  driver_name: string;
+  start_date: string;
+  end_date: string | null;
+  note: string | null;
+}
+
+export interface OdometerReading {
+  id: string;
+  miles: number;
+  recorded_at: string;
+  source: string;
+  note: string | null;
+}
+
 export interface VehicleDetail {
   vehicle: Vehicle;
   schedules: Schedule[];
@@ -277,6 +313,10 @@ export interface VehicleDetail {
   expenses_by_category: Record<string, number>;
   defects: Defect[];
   bookings: Booking[];
+  depreciation: Depreciation;
+  current_driver: string | null;
+  driver_assignments: DriverAssignment[];
+  odometer_readings: OdometerReading[];
 }
 
 export const EXPENSE_LABELS: Record<string, string> = {

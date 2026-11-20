@@ -390,6 +390,14 @@ class _VehicleFields(BaseModel):
     notes: str | None = Field(default=None, max_length=5000)
     insurance_expires_at: datetime | None = None
     inspection_expires_at: datetime | None = None
+    registration_expires_at: datetime | None = None
+    # Purchase & depreciation inputs (derived numbers come back on the detail).
+    purchase_price_cents: int | None = Field(default=None, ge=0, le=100_000_000_000)
+    purchase_date: datetime | None = None
+    odometer_at_purchase: float | None = Field(default=None, ge=0, le=5_000_000)
+    salvage_value_cents: int | None = Field(default=None, ge=0, le=100_000_000_000)
+    useful_life_months: int | None = Field(default=None, ge=1, le=600)
+    depreciation_method: str | None = Field(default=None, max_length=24)
 
     @field_validator("vin")
     @classmethod
@@ -430,6 +438,13 @@ class VehicleOut(ORMModel):
     notes: str | None
     insurance_expires_at: datetime | None
     inspection_expires_at: datetime | None
+    registration_expires_at: datetime | None = None
+    purchase_price_cents: int | None = None
+    purchase_date: datetime | None = None
+    odometer_at_purchase: float | None = None
+    salvage_value_cents: int | None = None
+    useful_life_months: int | None = None
+    depreciation_method: str | None = None
     status: VehicleStatus
     odometer_miles: float | None
     odometer_updated_at: datetime | None
@@ -525,6 +540,48 @@ class DefectOut(ORMModel):
     suggested_service_slug: str | None = None
 
 
+class DepreciationOut(BaseModel):
+    method: str
+    purchase_price_cents: int | None
+    salvage_value_cents: int
+    useful_life_months: int | None
+    monthly_cents: int | None
+    annual_cents: int | None
+    months_elapsed: int | None
+    accumulated_cents: int | None
+    net_book_value_cents: int | None
+
+
+class DriverAssignmentIn(BaseModel):
+    driver_id: uuid.UUID | None = None
+    driver_name: str | None = Field(default=None, max_length=128)
+    start_date: datetime | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class DriverAssignmentOut(ORMModel):
+    id: uuid.UUID
+    driver_id: uuid.UUID | None
+    driver_name: str
+    start_date: datetime
+    end_date: datetime | None
+    note: str | None
+
+
+class OdometerReadingIn(BaseModel):
+    miles: float = Field(ge=0, le=5_000_000)
+    recorded_at: datetime | None = None
+    note: str | None = Field(default=None, max_length=2000)
+
+
+class OdometerReadingOut(ORMModel):
+    id: uuid.UUID
+    miles: float
+    recorded_at: datetime
+    source: str
+    note: str | None
+
+
 class VehicleDetailOut(BaseModel):
     vehicle: VehicleOut
     schedules: list[ScheduleOut]
@@ -532,6 +589,10 @@ class VehicleDetailOut(BaseModel):
     expenses_by_category: dict[str, int]
     defects: list[DefectOut]
     bookings: list["BookingOut"]
+    depreciation: DepreciationOut
+    current_driver: str | None = None
+    driver_assignments: list[DriverAssignmentOut] = []
+    odometer_readings: list[OdometerReadingOut] = []
 
 
 # ------------------------------------------------------------------ notifications / misc

@@ -81,6 +81,11 @@ const STATUS_STYLES: Record<string, string> = {
   completed: "bg-pine text-white",
   cancelled: "bg-mist text-faint",
   disputed: "bg-danger-wash text-danger",
+  // Vehicle statuses
+  active: "bg-pine-wash text-pine",
+  in_repair: "bg-amber-wash text-amber-ink",
+  inactive: "bg-mist text-steel",
+  sold: "bg-charcoal text-white",
 };
 
 export function StatusBadge({ status }: { status: string }) {
