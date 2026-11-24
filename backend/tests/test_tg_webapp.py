@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import time
+from pathlib import Path
 from urllib.parse import urlencode
 
 from app.models import InspectionDefect, PreTripInspection, TelegramLink, Vehicle
@@ -75,8 +76,10 @@ class TestTgWebApp:
         assert pti.unit_number == "07" and pti.result == "fail" and pti.inspection_type == "pre"
         brakes = next(i for i in pti.items if i["key"] == "brakes")
         assert brakes["status"] == "defect" and brakes["photos"] and brakes["photos"][0].startswith("/media/pti/")
-        # Photo file was written.
-        assert (tmp_path / "pti" / str(pti.id) / "brakes__0.jpg").exists()
+        # Stored under a server-generated name (not the client filename) and ends .jpg.
+        stored_name = Path(brakes["photos"][0]).name
+        assert stored_name.endswith(".jpg") and "brakes__0" not in stored_name
+        assert (tmp_path / "pti" / str(pti.id) / stored_name).exists()
         # Defect created on the truck.
         d = db.execute(select(InspectionDefect).where(InspectionDefect.vehicle_id == veh.id)).scalar_one()
         assert d.source == "telegram_pti" and "soft pedal" in (d.comment or "")
@@ -97,3 +100,23 @@ class TestTgWebApp:
         assert r.status_code == 200 and r.json()["result"] == "pass"
         pti = db.execute(select(PreTripInspection).where(PreTripInspection.owner_user_id == u.id)).scalar_one()
         assert pti.inspection_type == "post" and pti.defect_count == 0
+
+    def test_submit_rejects_non_image_upload(self, client, db, monkeypatch, tmp_path):
+        monkeypatch.setenv("TELEGRAM_BOT_TOKEN", TOKEN)
+        monkeypatch.setattr("app.api.tg.get_settings",
+                            lambda: type("S", (), {"media_dir": str(tmp_path)})())
+        u, _ = fleet_user(client, db, "tgw4@example.com")
+        veh = Vehicle(owner_user_id=u.id, unit_number="42")
+        db.add(veh)
+        db.add(TelegramLink(chat_id=7777, owner_user_id=u.id, driver_name="X"))
+        db.commit()
+        payload = {"vehicle_id": str(veh.id), "inspection_type": "pre", "overall": "all_good",
+                   "items": [{"key": "brakes", "label": "Brakes", "status": "ok"}]}
+        r = client.post("/api/tg/submit",
+                        data={"init_data": make_init_data(7777), "payload": json.dumps(payload)},
+                        files=[("photos", ("brakes__0.html", b"<script>alert(1)</script>", "text/html"))])
+        assert r.status_code == 200 and r.json()["photos"] == 0  # not an image -> rejected
+        pti = db.execute(select(PreTripInspection).where(PreTripInspection.owner_user_id == u.id)).scalar_one()
+        assert all(not i["photos"] for i in pti.items)
+        # Nothing written to disk.
+        assert not (tmp_path / "pti" / str(pti.id)).exists() or not any((tmp_path / "pti" / str(pti.id)).iterdir())

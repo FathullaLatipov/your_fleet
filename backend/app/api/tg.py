@@ -6,7 +6,6 @@ token), not a JWT — the mini app runs inside Telegram, outside our login.
 from __future__ import annotations
 
 import json
-import re
 import uuid
 from pathlib import Path
 
@@ -24,6 +23,21 @@ router = APIRouter(prefix="/api/tg", tags=["telegram-webapp"])
 
 MAX_PHOTOS = 60
 MAX_PHOTO_BYTES = 8_000_000
+
+
+def _image_ext(head: bytes) -> str | None:
+    """Return a safe extension if `head` is a real raster image, else None.
+    SVG/HTML and anything script-bearing have no binary signature and are
+    rejected, so a stored file can never be served as active content."""
+    if head.startswith(b"\xff\xd8\xff"):
+        return "jpg"
+    if head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "png"
+    if head.startswith((b"GIF87a", b"GIF89a")):
+        return "gif"
+    if head[:4] == b"RIFF" and head[8:12] == b"WEBP":
+        return "webp"
+    return None
 
 
 def _driver(init_data: str, db: Session) -> TelegramLink:
@@ -97,19 +111,24 @@ async def submit(init_data: str = Form(...), payload: str = Form(...),
     by_key = {i["key"]: i for i in norm}
     media = Path(get_settings().media_dir) / "pti" / str(pti.id)
     saved = 0
-    for f in photos:
-        if saved >= MAX_PHOTOS:
-            break
-        content = await f.read()
+    # Every part counts toward the cap, so a flood of junk parts is bounded.
+    for part in photos[:MAX_PHOTOS]:
+        # Bounded read: never pull more than the limit into memory.
+        content = await part.read(MAX_PHOTO_BYTES + 1)
         if not content or len(content) > MAX_PHOTO_BYTES:
             continue
-        key = (f.filename or "").split("__", 1)[0]
-        safe = re.sub(r"[^A-Za-z0-9_.-]", "_", f.filename or f"photo_{saved}.jpg")[:80]
+        ext = _image_ext(content[:16])
+        if ext is None:
+            continue  # not a real image — reject (no HTML/SVG/script on disk)
+        # Server-generated name + validated extension; the client filename is
+        # only used to route the photo to its checklist item.
+        item_key = (part.filename or "").split("__", 1)[0]
+        name = f"{uuid.uuid4().hex}.{ext}"
         media.mkdir(parents=True, exist_ok=True)
-        (media / safe).write_bytes(content)
-        rel = f"/media/pti/{pti.id}/{safe}"
-        if key in by_key:
-            by_key[key]["photos"].append(rel)
+        (media / name).write_bytes(content)
+        rel = f"/media/pti/{pti.id}/{name}"
+        if item_key in by_key:
+            by_key[item_key]["photos"].append(rel)
         saved += 1
     flag_modified(pti, "items")  # nested photo lists changed in place
 

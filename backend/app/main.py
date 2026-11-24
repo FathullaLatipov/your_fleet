@@ -42,6 +42,11 @@ PUBLIC_CACHE_CONTROL = "public, max-age=60, s-maxage=120, stale-while-revalidate
 @app.middleware("http")
 async def public_cache_headers(request: Request, call_next):
     response = await call_next(request)
+    # Defense in depth for user-uploaded media: never let a browser sniff a
+    # stored file into active content (uploads are validated to be raster
+    # images, but nosniff closes the MIME-confusion gap regardless).
+    if request.url.path.startswith("/media/"):
+        response.headers["X-Content-Type-Options"] = "nosniff"
     if (request.method == "GET" and request.url.path in PUBLIC_CACHEABLE
             and response.status_code == 200 and "cache-control" not in response.headers):
         response.headers["Cache-Control"] = PUBLIC_CACHE_CONTROL
