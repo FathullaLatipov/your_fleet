@@ -1,5 +1,12 @@
 """Driver PTI Telegram flow: link, run the checklist, persist defects."""
-from app.models import DriverLinkCode, InspectionDefect, PreTripInspection, TelegramLink, Vehicle
+from app.models import (
+    DriverLinkCode,
+    FleetDriver,
+    InspectionDefect,
+    PreTripInspection,
+    TelegramLink,
+    Vehicle,
+)
 from app.services import telegram as tg
 from sqlalchemy import select
 from tests.test_api import client  # noqa: F401
@@ -145,3 +152,22 @@ class TestTelegramPti:
         tg.handle_update(db, states, _msg(3, 222, "/start ONCE2345"), fc)
         assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == 222)).first() is None
         assert any("invalid or expired" in t for cid, t in fc.sent if cid == 222)
+
+    def test_unlink_revokes_the_code(self, client, db):
+        u, h = fleet_user(client, db, "tg6@example.com")
+        code = client.post("/api/fleet/telegram/link-code", headers=h, json={}).json()["code"]
+        fc = FakeClient(); states: dict = {}; chat = 1212
+        tg.handle_update(db, states, _msg(1, chat, f"/start {code}"), fc)
+        link_id = client.get("/api/fleet/telegram/status", headers=h).json()["drivers"][0]["id"]
+        assert client.delete(f"/api/fleet/telegram/links/{link_id}", headers=h).status_code == 204
+        # The same chat tries to re-link with the old code -> revoked, no link.
+        tg.handle_update(db, states, _msg(2, chat, f"/start {code}"), fc)
+        assert client.get("/api/fleet/telegram/status", headers=h).json()["linked_count"] == 0
+
+    def test_link_code_rejects_foreign_driver(self, client, db):
+        _, h1 = fleet_user(client, db, "tg7a@example.com")
+        u2, _ = fleet_user(client, db, "tg7b@example.com")
+        drv = FleetDriver(owner_user_id=u2.id, name="Theirs")
+        db.add(drv); db.commit()
+        r = client.post("/api/fleet/telegram/link-code", headers=h1, json={"driver_id": str(drv.id)})
+        assert r.status_code == 404

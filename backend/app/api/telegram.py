@@ -6,7 +6,7 @@ import secrets
 import uuid
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -49,13 +49,16 @@ def _deep_link(code: str) -> tuple[str | None, str | None]:
 def create_link_code(body: LinkCodeIn, owner: User = Depends(fleet_user),
                      db: Session = Depends(get_db)):
     name = (body.driver_name or "").strip() or None
+    driver_id = None
     if body.driver_id is not None:
         driver = db.get(FleetDriver, body.driver_id)
-        if driver is not None and driver.owner_user_id == owner.id:
-            name = name or driver.name
+        if driver is None or driver.owner_user_id != owner.id:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Driver not found")
+        driver_id = driver.id
+        name = name or driver.name
     code = _gen_code(db)
     row = DriverLinkCode(owner_user_id=owner.id, code=code,
-                         driver_id=body.driver_id, driver_name=name,
+                         driver_id=driver_id, driver_name=name,
                          expires_at=utcnow() + timedelta(days=CODE_TTL_DAYS))
     db.add(row)
     db.commit()
@@ -84,10 +87,20 @@ def telegram_status(owner: User = Depends(fleet_user), db: Session = Depends(get
 @router.delete("/telegram/links/{link_id}", status_code=204)
 def unlink_driver(link_id: uuid.UUID, owner: User = Depends(fleet_user),
                   db: Session = Depends(get_db)):
-    """Disconnect a driver's Telegram chat from this carrier."""
+    """Disconnect a driver's Telegram chat from this carrier, and revoke any
+    link code bound to that chat so it can't silently re-link afterwards."""
     row = db.get(TelegramLink, link_id)
     if row is not None and row.owner_user_id == owner.id:
+        chat_id = row.chat_id
         db.delete(row)
+        codes = db.execute(
+            select(DriverLinkCode).where(
+                DriverLinkCode.owner_user_id == owner.id,
+                DriverLinkCode.used_by_chat_id == chat_id,
+            )
+        ).scalars().all()
+        for c in codes:
+            c.expires_at = utcnow()  # expired -> rejected on any future /start
         db.commit()
 
 
