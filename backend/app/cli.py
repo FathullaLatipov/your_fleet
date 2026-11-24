@@ -178,6 +178,41 @@ def cmd_samsara_loop(args: argparse.Namespace) -> int:
         time.sleep(args.interval)
 
 
+def cmd_telegram_bot(args: argparse.Namespace) -> int:
+    """Long-poll Telegram and run the driver PTI flow. Idles (no crash loop)
+    while TELEGRAM_BOT_TOKEN is unset, so the service can ship before the bot
+    exists. Conversation state is in-memory; completed inspections are saved."""
+    import os
+    import time
+    from datetime import datetime, timezone
+
+    from app.services.telegram import TelegramClient, handle_update
+
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    states: dict = {}
+    offset: int | None = None
+    client = None
+    while True:
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        if not token:
+            print(f"[{stamp}] telegram-bot idle: TELEGRAM_BOT_TOKEN is not set", flush=True)
+            time.sleep(max(args.idle_interval, 5))
+            continue
+        try:
+            client = client or TelegramClient(token)
+            updates = client.get_updates(offset, timeout=50)
+            for u in updates:
+                offset = u["update_id"] + 1
+                try:
+                    with SessionLocal() as db:
+                        handle_update(db, states, u, client)
+                except Exception as e:  # noqa: BLE001 - one bad update mustn't stop the bot
+                    print(f"[{stamp}] telegram update failed: {type(e).__name__}: {e}", flush=True)
+        except Exception as e:  # noqa: BLE001 - keep polling through transient errors
+            print(f"[{stamp}] telegram-bot error: {type(e).__name__}: {e}", flush=True)
+            time.sleep(5)
+
+
 def cmd_monday_export(args: argparse.Namespace) -> int:
     from app.services.monday_export import export_expenses, make_gql
 
@@ -338,6 +373,12 @@ def main() -> int:
     p_sl.add_argument("--create-missing", action="store_true",
                       help="Create vehicles that exist in Samsara but not here")
     p_sl.set_defaults(func=cmd_samsara_loop)
+
+    p_tg = sub.add_parser("telegram-bot",
+                          help="Run the driver PTI Telegram bot (long-polling; needs TELEGRAM_BOT_TOKEN)")
+    p_tg.add_argument("--idle-interval", type=int, default=20,
+                      help="Seconds to wait between checks while the token isn't set")
+    p_tg.set_defaults(func=cmd_telegram_bot)
 
     p_m = sub.add_parser("monday-export",
                          help="Export fleet expenses to a monday.com board (needs MONDAY_API_TOKEN)")

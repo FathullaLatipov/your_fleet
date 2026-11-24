@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from app.api import (
     admin, auth, bookings, businesses, claims, fleet, fleet_assets,
     fleet_finance, fleet_import, fleet_ops, fleet_reports, fleet_telematics,
-    integrations, inventory, me, offers, reviews, work_orders,
+    integrations, inventory, me, offers, reviews, telegram, work_orders,
 )
 from app.config import get_settings
 
@@ -58,7 +58,7 @@ for router in (auth.router, businesses.router, claims.router, offers.router,
                fleet_assets.router, fleet_finance.router, fleet_ops.router,
                fleet_reports.router, fleet_import.router, fleet_telematics.router,
                work_orders.router, inventory.router, integrations.router,
-               admin.router):
+               telegram.router, admin.router):
     app.include_router(router)
 
 _media = Path(settings.media_dir)

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
@@ -236,8 +237,119 @@ function ProfileInner() {
             )}
           </div>
         )}
+
+        <TelegramPtiSection />
       </div>
     </div>
+  );
+}
+
+interface TgStatus {
+  configured: boolean;
+  bot_username: string | null;
+  linked_count: number;
+  drivers: { driver_name: string; telegram_username: string | null; linked_at: string }[];
+}
+interface LinkCode {
+  code: string;
+  bot_username: string | null;
+  deep_link: string | null;
+  expires_at: string | null;
+}
+
+/* Driver PTI over the shared YourFleet Telegram bot: drivers connect with a
+   code and run their pre-trip inspection in chat; failed items become PTI
+   defects on the truck. This card issues the invite codes. */
+function TelegramPtiSection() {
+  const [status, setStatus] = useState<TgStatus | null>(null);
+  const [invite, setInvite] = useState<LinkCode | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [copied, setCopied] = useState("");
+
+  const load = useCallback(() => {
+    api<TgStatus>("/api/fleet/telegram/status").then(setStatus).catch(() => {});
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const genInvite = async () => {
+    setBusy(true);
+    try {
+      setInvite(await api<LinkCode>("/api/fleet/telegram/link-code", { method: "POST", body: {} }));
+      load();
+    } catch { /* ignore */ } finally { setBusy(false); }
+  };
+  const copy = (what: string, text: string) => {
+    navigator.clipboard?.writeText(text).then(() => { setCopied(what); setTimeout(() => setCopied(""), 1500); }).catch(() => {});
+  };
+
+  return (
+    <section className="card mt-4 p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold">Driver PTI — Telegram</h3>
+          <p className="mt-0.5 text-sm text-steel">
+            Drivers run their pre-trip inspection in Telegram. Failed items show up as PTI defects on the truck.
+          </p>
+        </div>
+        <Link href="/pti" className="shrink-0 text-sm font-semibold text-pine hover:underline">Inspections →</Link>
+      </div>
+
+      {status && !status.configured && (
+        <p className="mt-3 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-3 text-sm text-steel">
+          The YourFleet driver bot isn&apos;t switched on yet. Generate an invite below — it starts working
+          the moment the bot is live.
+        </p>
+      )}
+      {status?.bot_username && (
+        <p className="mt-3 text-sm text-steel">Bot: <span className="font-semibold">@{status.bot_username}</span></p>
+      )}
+
+      <div className="mt-4">
+        <button onClick={genInvite} disabled={busy} className="btn !py-2 text-sm">
+          {busy ? "Generating…" : "Generate driver invite"}
+        </button>
+      </div>
+
+      {invite && (
+        <div className="mt-3 rounded-lg border border-pine/30 bg-pine-wash/40 p-4">
+          <p className="text-sm font-semibold text-pine">Send this to your driver</p>
+          {invite.deep_link ? (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <code className="min-w-0 flex-1 truncate rounded bg-panel px-2 py-1.5 text-sm">{invite.deep_link}</code>
+              <button onClick={() => copy("link", invite.deep_link!)} className="btn-quiet !py-1.5 text-sm">
+                {copied === "link" ? "Copied" : "Copy link"}
+              </button>
+            </div>
+          ) : (
+            <p className="mt-2 text-sm text-steel">
+              Driver opens the bot and sends: <code className="rounded bg-panel px-1.5 py-0.5">/start {invite.code}</code>
+            </p>
+          )}
+          <p className="mt-2 text-xs text-faint">
+            Code <span className="font-mono">{invite.code}</span>
+            {invite.expires_at && <> · expires {new Date(invite.expires_at).toLocaleDateString()}</>}
+          </p>
+        </div>
+      )}
+
+      {status && status.drivers.length > 0 && (
+        <div className="mt-4">
+          <p className="text-xs font-semibold uppercase tracking-wide text-faint">
+            Connected drivers ({status.linked_count})
+          </p>
+          <ul className="mt-2 space-y-1">
+            {status.drivers.map((d, i) => (
+              <li key={i} className="flex items-center justify-between gap-2 text-sm">
+                <span className="font-medium">{d.driver_name}
+                  {d.telegram_username && <span className="ml-1.5 text-steel">@{d.telegram_username}</span>}
+                </span>
+                <span className="text-xs text-faint">{new Date(d.linked_at).toLocaleDateString()}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </section>
   );
 }
 

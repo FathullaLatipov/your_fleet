@@ -25,6 +25,10 @@ class Settings(BaseSettings):
     smtp_user: str = ""
     smtp_password: str = ""
     frontend_url: str = "https://your-fleet.vercel.app"
+    # Shared Telegram bot for driver PTI (one bot for all carriers; drivers
+    # link with a per-company code). Create it in @BotFather.
+    telegram_bot_token: str = ""
+    telegram_bot_username: str = ""  # without @, for deep links (t.me/<username>)
 
     @property
     def cors_origin_list(self) -> list[str]:

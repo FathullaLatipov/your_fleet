@@ -637,3 +637,41 @@ class IntegrationOut(BaseModel):
 
 class IntegrationTokenIn(BaseModel):
     token: str = Field(min_length=8, max_length=4096)
+
+
+# ---------------------------------------------------------------- telegram PTI
+
+class LinkCodeIn(BaseModel):
+    driver_id: uuid.UUID | None = None
+    driver_name: str | None = Field(default=None, max_length=128)
+
+
+class LinkCodeOut(BaseModel):
+    code: str
+    bot_username: str | None
+    deep_link: str | None
+    expires_at: datetime | None
+
+
+class TelegramDriverOut(BaseModel):
+    driver_name: str
+    telegram_username: str | None
+    linked_at: datetime
+
+
+class TelegramStatusOut(BaseModel):
+    configured: bool
+    bot_username: str | None
+    linked_count: int
+    drivers: list[TelegramDriverOut]
+
+
+class PtiOut(ORMModel):
+    id: uuid.UUID
+    vehicle_id: uuid.UUID | None
+    unit_number: str | None
+    driver_name: str | None
+    result: str
+    defect_count: int
+    items: list
+    performed_at: datetime

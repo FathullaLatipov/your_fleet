@@ -41,6 +41,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       FRONTEND_URL: ${FRONTEND_URL:-https://your-fleet.vercel.app}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       ENVIRONMENT: production
       MEDIA_DIR: /app/media
     ports:
@@ -75,6 +77,24 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASSWORD: ${SMTP_PASSWORD:-}
       FRONTEND_URL: ${FRONTEND_URL:-https://your-fleet.vercel.app}
+      ENVIRONMENT: production
+
+  # Shared driver-PTI Telegram bot (long-polling). Idles until
+  # TELEGRAM_BOT_TOKEN is set; drivers link per-carrier with a code.
+  telegram-bot:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["python", "-m", "app.cli", "telegram-bot"]
+    environment:
+      DATABASE_URL: postgresql+psycopg://yourfleet:${YF_DB_PASSWORD}@db:5432/yourfleet
+      JWT_SECRET: ${YF_JWT_SECRET:?set YF_JWT_SECRET in .env}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
       ENVIRONMENT: production
 
 volumes:

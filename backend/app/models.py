@@ -19,6 +19,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
@@ -591,6 +592,59 @@ class FleetDriver(Base):
     assigned_vehicle_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("vehicles.id"))
     hired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     notes: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class DriverLinkCode(Base):
+    """A short code a carrier generates so a driver can connect to the shared
+    Telegram bot. The driver sends /start <code>; the bot then links their chat
+    to this carrier. Reusable until it expires."""
+
+    __tablename__ = "driver_link_codes"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    code: Mapped[str] = mapped_column(String(16), unique=True, index=True)
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("fleet_drivers.id", ondelete="SET NULL"))
+    driver_name: Mapped[str | None] = mapped_column(String(128))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TelegramLink(Base):
+    """A driver's Telegram chat linked to a carrier, so the shared bot knows
+    whose fleet a message belongs to. One row per Telegram chat."""
+
+    __tablename__ = "telegram_links"
+
+    id: Mapped[uuid.UUID] = pk()
+    chat_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    driver_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("fleet_drivers.id", ondelete="SET NULL"))
+    driver_name: Mapped[str] = mapped_column(String(128))
+    telegram_username: Mapped[str | None] = mapped_column(String(64))
+    linked_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PreTripInspection(Base):
+    """A driver's pre-trip (PTI/DVIR) inspection submitted via the Telegram bot.
+    Failed items are also written as InspectionDefect rows (source telegram_pti)
+    so they surface on the truck and can open a work order."""
+
+    __tablename__ = "pre_trip_inspections"
+
+    id: Mapped[uuid.UUID] = pk()
+    owner_user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
+    vehicle_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("vehicles.id", ondelete="SET NULL"), index=True)
+    unit_number: Mapped[str | None] = mapped_column(String(32))
+    driver_name: Mapped[str | None] = mapped_column(String(128))
+    chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    result: Mapped[str] = mapped_column(String(8))          # pass | fail
+    defect_count: Mapped[int] = mapped_column(Integer, default=0)
+    items: Mapped[dict] = mapped_column(JSON, default=dict)  # [{key,label,status,note}]
+    performed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
