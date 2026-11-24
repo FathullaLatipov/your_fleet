@@ -100,7 +100,7 @@ def unlink_driver(link_id: uuid.UUID, owner: User = Depends(fleet_user),
             )
         ).scalars().all()
         for c in codes:
-            c.expires_at = utcnow()  # expired -> rejected on any future /start
+            db.delete(c)  # consumed code is gone -> rejected on any future /start
         db.commit()
 
 

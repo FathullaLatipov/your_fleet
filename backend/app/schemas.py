@@ -672,6 +672,7 @@ class PtiOut(ORMModel):
     vehicle_id: uuid.UUID | None
     unit_number: str | None
     driver_name: str | None
+    inspection_type: str
     result: str
     defect_count: int
     items: list

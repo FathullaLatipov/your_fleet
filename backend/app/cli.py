@@ -186,9 +186,10 @@ def cmd_telegram_bot(args: argparse.Namespace) -> int:
     import time
     from datetime import datetime, timezone
 
-    from app.services.telegram import TelegramClient, handle_update
+    from app.services.telegram import TelegramClient, handle_update, mini_app_url
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+    menu_set = False
 
     def _safe(e: Exception) -> str:
         # httpx errors include the request URL, which embeds the bot token.
@@ -206,6 +207,9 @@ def cmd_telegram_bot(args: argparse.Namespace) -> int:
             continue
         try:
             client = client or TelegramClient(token)
+            if not menu_set:
+                client.set_menu_button("Inspect", mini_app_url())
+                menu_set = True
             updates = client.get_updates(offset, timeout=50)
             for u in updates:
                 offset = u["update_id"] + 1

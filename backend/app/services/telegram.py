@@ -10,22 +10,19 @@ persisted. The HTTP layer is a thin wrapper so the flow can be unit-tested.
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import os
-from dataclasses import dataclass, field
+import time
 from datetime import timezone
+from urllib.parse import parse_qsl
 
 import httpx
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import (
-    DriverLinkCode,
-    InspectionDefect,
-    PreTripInspection,
-    TelegramLink,
-    Vehicle,
-    utcnow,
-)
+from app.models import DriverLinkCode, TelegramLink, utcnow
 
 API = "https://api.telegram.org"
 
@@ -74,66 +71,23 @@ class TelegramClient:
         except httpx.HTTPError:
             pass
 
+    def send_webapp_button(self, chat_id: int, text: str, button_text: str, url: str) -> None:
+        self._call("sendMessage", {
+            "chat_id": chat_id, "text": text, "parse_mode": "HTML",
+            "reply_markup": {"inline_keyboard": [[{"text": button_text, "web_app": {"url": url}}]]},
+        })
 
-@dataclass
-class ConvState:
-    stage: str = "idle"            # idle | await_unit | checklist | await_note
-    owner_user_id: object = None
-    driver_name: str = ""
-    vehicle_id: object = None
-    unit_number: str = ""
-    idx: int = 0
-    results: list[dict] = field(default_factory=list)
+    def set_menu_button(self, text: str, url: str) -> None:
+        try:
+            self._call("setChatMenuButton", {
+                "menu_button": {"type": "web_app", "text": text, "web_app": {"url": url}}})
+        except httpx.HTTPError:
+            pass
 
 
 HELP = ("👋 This is the YourFleet driver bot.\n\n"
         "• <b>/start &lt;code&gt;</b> — connect to your carrier (ask dispatch for the code)\n"
-        "• <b>/pti</b> — start a pre-trip inspection\n"
-        "• <b>/cancel</b> — cancel the current inspection")
-
-
-def _item_buttons() -> list[tuple[str, str]]:
-    return [("✅ OK", "pti:ok"), ("⚠️ Defect", "pti:defect")]
-
-
-def _send_item(client: TelegramClient, chat_id: int, st: ConvState) -> None:
-    key, label = PTI_ITEMS[st.idx]
-    client.send_message(
-        chat_id,
-        f"<b>Step {st.idx + 1}/{len(PTI_ITEMS)}</b> — {label}\n\nIs this OK?",
-        buttons=_item_buttons(),
-    )
-
-
-def _finish(db: Session, client: TelegramClient, chat_id: int, st: ConvState) -> None:
-    defects = [r for r in st.results if r["status"] == "defect"]
-    result = "fail" if defects else "pass"
-    pti = PreTripInspection(
-        owner_user_id=st.owner_user_id, vehicle_id=st.vehicle_id,
-        unit_number=st.unit_number, driver_name=st.driver_name, chat_id=chat_id,
-        result=result, defect_count=len(defects), items=st.results, performed_at=utcnow(),
-    )
-    db.add(pti)
-    if st.vehicle_id is not None:
-        for d in defects:
-            db.add(InspectionDefect(
-                vehicle_id=st.vehicle_id, source="telegram_pti",
-                defect_type=d["label"][:64], comment=d.get("note") or None,
-                severity="major",
-            ))
-    db.commit()
-    if defects:
-        lines = "\n".join(f"• {d['label']}" + (f" — {d['note']}" if d.get("note") else "")
-                          for d in defects)
-        client.send_message(
-            chat_id,
-            f"⚠️ <b>PTI complete for #{st.unit_number}</b>\n"
-            f"{len(defects)} defect(s) reported:\n{lines}\n\nDispatch has been notified.")
-    else:
-        client.send_message(
-            chat_id, f"✅ <b>PTI complete for #{st.unit_number}</b>\nNo defects — all good. Safe travels!")
-    st.stage = "idle"
-    st.results = []
+        "• <b>/pti</b> — open your pre-trip inspection")
 
 
 def _link(db: Session, chat_id: int, code: str, tg_name: str, tg_username: str | None) -> TelegramLink | None:
@@ -165,21 +119,13 @@ def _link(db: Session, chat_id: int, code: str, tg_name: str, tg_username: str |
     return link
 
 
-def _match_vehicle(db: Session, owner_user_id, unit: str) -> Vehicle | None:
-    u = unit.strip().lstrip("#").lower()
-    return db.execute(
-        select(Vehicle).where(
-            Vehicle.owner_user_id == owner_user_id,
-            func.lower(Vehicle.unit_number) == u,
-        )
-    ).scalar_one_or_none()
-
-
 def handle_update(db: Session, states: dict, update: dict, client: TelegramClient) -> None:
-    """Process one Telegram update (message or button press)."""
+    """Handle one Telegram update: connect a driver and launch the Mini App.
+    The inspection itself runs in the web app, so there is no chat checklist.
+    `states` is unused (kept for the worker's call signature)."""
     cb = update.get("callback_query")
     if cb:
-        _handle_callback(db, states, cb, client)
+        client.answer_callback(cb.get("id", ""))
         return
     msg = update.get("message")
     if not msg:
@@ -187,92 +133,40 @@ def handle_update(db: Session, states: dict, update: dict, client: TelegramClien
     chat_id = msg["chat"]["id"]
     text = (msg.get("text") or "").strip()
     frm = msg.get("from") or {}
-    tg_name = (frm.get("first_name") or "") + (f" {frm.get('last_name')}" if frm.get("last_name") else "")
+    tg_name = ((frm.get("first_name") or "")
+               + (f" {frm.get('last_name')}" if frm.get("last_name") else "")).strip()
     tg_username = frm.get("username")
-    st = states.setdefault(chat_id, ConvState())
 
     if text.startswith("/start"):
         parts = text.split(maxsplit=1)
         if len(parts) == 2 and parts[1].strip():
-            link = _link(db, chat_id, parts[1], tg_name.strip(), tg_username)
+            link = _link(db, chat_id, parts[1], tg_name, tg_username)
             if link is None:
                 client.send_message(chat_id, "❌ That code is invalid or expired. Ask dispatch for a new one.")
             else:
-                st.stage = "idle"
-                client.send_message(
-                    chat_id, f"✅ Connected, {link.driver_name}! Send <b>/pti</b> to start a pre-trip inspection.")
+                client.send_webapp_button(
+                    chat_id, f"✅ Connected, {link.driver_name}! Tap below to start an inspection 👇",
+                    "🔧 Start inspection", mini_app_url())
         else:
             client.send_message(chat_id, HELP)
         return
 
-    if text == "/cancel":
-        st.stage = "idle"
-        st.results = []
-        client.send_message(chat_id, "Inspection cancelled. Send /pti to start again.")
-        return
-
     if text == "/pti":
-        link = db.execute(select(TelegramLink).where(TelegramLink.chat_id == chat_id)).scalar_one_or_none()
+        link = db.execute(
+            select(TelegramLink).where(TelegramLink.chat_id == chat_id)).scalar_one_or_none()
         if link is None:
             client.send_message(chat_id, "You're not connected yet. Send <b>/start &lt;code&gt;</b> (ask dispatch).")
             return
-        states[chat_id] = ConvState(stage="await_unit", owner_user_id=link.owner_user_id,
-                                    driver_name=link.driver_name)
-        client.send_message(chat_id, "Which truck? Reply with its <b>unit number</b> (e.g. 043).")
-        return
-
-    if st.stage == "await_unit":
-        v = _match_vehicle(db, st.owner_user_id, text)
-        if v is None:
-            client.send_message(chat_id, f"No truck <b>#{text}</b> found. Check the unit number and reply again.")
-            return
-        st.vehicle_id = v.id
-        st.unit_number = v.unit_number
-        st.idx = 0
-        st.results = []
-        st.stage = "checklist"
-        client.send_message(chat_id, f"Starting pre-trip inspection for <b>#{v.unit_number}</b>.")
-        _send_item(client, chat_id, st)
-        return
-
-    if st.stage == "await_note":
-        note = "" if text == "/skip" else text
-        key, label = PTI_ITEMS[st.idx]
-        st.results.append({"key": key, "label": label, "status": "defect", "note": note})
-        st.idx += 1
-        if st.idx >= len(PTI_ITEMS):
-            _finish(db, client, chat_id, st)
-        else:
-            st.stage = "checklist"
-            _send_item(client, chat_id, st)
+        client.send_webapp_button(chat_id, "Tap below to start your inspection 👇",
+                                  "🔧 Start inspection", mini_app_url())
         return
 
     client.send_message(chat_id, HELP)
 
 
-def _handle_callback(db: Session, states: dict, cb: dict, client: TelegramClient) -> None:
-    data = cb.get("data") or ""
-    msg = cb.get("message") or {}
-    chat_id = (msg.get("chat") or {}).get("id")
-    client.answer_callback(cb["id"])
-    if chat_id is None:
-        return
-    st = states.get(chat_id)
-    if st is None or st.stage != "checklist" or not data.startswith("pti:"):
-        return
-    action = data.split(":", 1)[1]
-    key, label = PTI_ITEMS[st.idx]
-    if action == "defect":
-        st.stage = "await_note"
-        client.send_message(chat_id, f"Describe the issue with <b>{label}</b> (reply with text), or send /skip.")
-        return
-    # OK
-    st.results.append({"key": key, "label": label, "status": "ok", "note": ""})
-    st.idx += 1
-    if st.idx >= len(PTI_ITEMS):
-        _finish(db, client, chat_id, st)
-    else:
-        _send_item(client, chat_id, st)
+def mini_app_url() -> str:
+    from app.config import get_settings
+    return f"{get_settings().frontend_url.rstrip('/')}/tg/pti"
 
 
 def make_client() -> TelegramClient:
@@ -280,3 +174,42 @@ def make_client() -> TelegramClient:
     if not token:
         raise RuntimeError("TELEGRAM_BOT_TOKEN is not set.")
     return TelegramClient(token)
+
+
+def validate_init_data(init_data: str, max_age_seconds: int = 86400) -> dict | None:
+    """Verify a Telegram Web App initData string and return the parsed user.
+
+    The hash is HMAC-SHA256 of the sorted data-check-string, keyed by
+    HMAC-SHA256("WebAppData", bot_token). Returns {"id", "name", "username",
+    "auth_date"} when valid and fresh, else None.
+    """
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if not token or not init_data:
+        return None
+    try:
+        pairs = dict(parse_qsl(init_data, strict_parsing=True))
+    except ValueError:
+        return None
+    received = pairs.pop("hash", None)
+    if not received:
+        return None
+    check = "\n".join(f"{k}={pairs[k]}" for k in sorted(pairs))
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    calc = hmac.new(secret, check.encode(), hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(calc, received):
+        return None
+    try:
+        auth_date = int(pairs.get("auth_date", "0"))
+    except ValueError:
+        auth_date = 0
+    if max_age_seconds and auth_date and (time.time() - auth_date) > max_age_seconds:
+        return None
+    try:
+        user = json.loads(pairs.get("user") or "null")
+    except ValueError:
+        user = None
+    if not user or "id" not in user:
+        return None
+    name = " ".join(x for x in [user.get("first_name"), user.get("last_name")] if x).strip()
+    return {"id": int(user["id"]), "name": name or "Driver",
+            "username": user.get("username"), "auth_date": auth_date}

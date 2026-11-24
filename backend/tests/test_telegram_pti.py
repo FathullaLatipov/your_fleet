@@ -1,8 +1,8 @@
-"""Driver PTI Telegram flow: link, run the checklist, persist defects."""
+"""Telegram bot: linking drivers and launching the Mini App. The inspection
+itself runs in the web app (see test_tg_webapp)."""
 from app.models import (
     DriverLinkCode,
     FleetDriver,
-    InspectionDefect,
     PreTripInspection,
     TelegramLink,
     Vehicle,
@@ -15,10 +15,15 @@ from tests.test_fleet import fleet_user
 
 class FakeClient:
     def __init__(self):
-        self.sent = []
+        self.sent = []       # (chat_id, text)
+        self.webapps = []    # (chat_id, url)
 
     def send_message(self, chat_id, text, buttons=None):
         self.sent.append((chat_id, text))
+
+    def send_webapp_button(self, chat_id, text, button_text, url):
+        self.sent.append((chat_id, text))
+        self.webapps.append((chat_id, url))
 
     def answer_callback(self, *a, **k):
         pass
@@ -29,129 +34,62 @@ def _msg(uid, chat_id, text, uname="rick"):
             "from": {"first_name": "Rick", "username": uname}, "text": text}}
 
 
-def _cb(uid, chat_id, data):
-    return {"update_id": uid, "callback_query": {"id": f"c{uid}", "data": data,
-            "message": {"chat": {"id": chat_id}}}}
-
-
-class TestTelegramPti:
-    def test_full_flow_creates_pti_and_defect(self, client, db):
+class TestTelegramLinking:
+    def test_start_links_and_offers_webapp(self, client, db):
         u, _ = fleet_user(client, db, "tg1@example.com")
-        veh = Vehicle(owner_user_id=u.id, unit_number="043")
-        db.add(veh)
-        code = DriverLinkCode(owner_user_id=u.id, code="ABCD2345")
-        db.add(code)
-        db.commit()
-
-        fc = FakeClient()
-        states: dict = {}
-        chat = 555
-
+        db.add(DriverLinkCode(owner_user_id=u.id, code="ABCD2345")); db.commit()
+        fc = FakeClient(); states: dict = {}; chat = 555
         tg.handle_update(db, states, _msg(1, chat, "/start ABCD2345"), fc)
         link = db.execute(select(TelegramLink).where(TelegramLink.chat_id == chat)).scalar_one()
         assert link.owner_user_id == u.id and link.driver_name == "Rick"
+        assert fc.webapps and fc.webapps[0][0] == chat  # offered the inspection web app
 
-        tg.handle_update(db, states, _msg(2, chat, "/pti"), fc)
-        assert states[chat].stage == "await_unit"
-        tg.handle_update(db, states, _msg(3, chat, "043"), fc)
-        assert states[chat].stage == "checklist" and states[chat].unit_number == "043"
+    def test_pti_without_link_prompts_connect(self, client, db):
+        fc = FakeClient(); states: dict = {}
+        tg.handle_update(db, states, _msg(1, 123, "/pti"), fc)
+        assert any("not connected" in t for _, t in fc.sent)
 
-        # First item -> defect with a note; the rest OK.
-        uid = 10
-        tg.handle_update(db, states, _cb(uid, chat, "pti:defect"), fc); uid += 1
-        assert states[chat].stage == "await_note"
-        tg.handle_update(db, states, _msg(uid, chat, "Low tread, needs replacing"), fc); uid += 1
-        # Remaining items (len-1) all OK.
-        for _ in range(len(tg.PTI_ITEMS) - 1):
-            tg.handle_update(db, states, _cb(uid, chat, "pti:ok"), fc); uid += 1
-
-        pti = db.execute(select(PreTripInspection).where(PreTripInspection.owner_user_id == u.id)).scalar_one()
-        assert pti.result == "fail" and pti.defect_count == 1
-        assert pti.unit_number == "043" and len(pti.items) == len(tg.PTI_ITEMS)
-        defects = db.execute(select(InspectionDefect).where(InspectionDefect.vehicle_id == veh.id)).scalars().all()
-        assert len(defects) == 1 and defects[0].source == "telegram_pti"
-        assert "Low tread" in (defects[0].comment or "")
-        # The bot confirmed completion.
-        assert any("PTI complete" in t for _, t in fc.sent)
-
-    def test_all_ok_passes_no_defects(self, client, db):
-        u, _ = fleet_user(client, db, "tg2@example.com")
-        veh = Vehicle(owner_user_id=u.id, unit_number="07")
-        db.add(veh)
-        db.add(DriverLinkCode(owner_user_id=u.id, code="PASS2345"))
-        db.commit()
-        fc = FakeClient(); states: dict = {}; chat = 777
-        tg.handle_update(db, states, _msg(1, chat, "/start PASS2345"), fc)
-        tg.handle_update(db, states, _msg(2, chat, "/pti"), fc)
-        tg.handle_update(db, states, _msg(3, chat, "07"), fc)
-        uid = 10
-        for _ in range(len(tg.PTI_ITEMS)):
-            tg.handle_update(db, states, _cb(uid, chat, "pti:ok"), fc); uid += 1
-        pti = db.execute(select(PreTripInspection).where(PreTripInspection.owner_user_id == u.id)).scalar_one()
-        assert pti.result == "pass" and pti.defect_count == 0
-        assert db.execute(select(InspectionDefect).where(InspectionDefect.vehicle_id == veh.id)).first() is None
-
-    def test_bad_code_and_unknown_unit(self, client, db):
+    def test_bad_code_rejected(self, client, db):
         u, _ = fleet_user(client, db, "tg3@example.com")
-        db.add(Vehicle(owner_user_id=u.id, unit_number="99"))
-        db.add(DriverLinkCode(owner_user_id=u.id, code="GOOD2345"))
-        db.commit()
-        fc = FakeClient(); states: dict = {}; chat = 888
-        tg.handle_update(db, states, _msg(1, chat, "/start WRONGCOD"), fc)
-        assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == chat)).first() is None
+        db.add(DriverLinkCode(owner_user_id=u.id, code="GOOD2345")); db.commit()
+        fc = FakeClient(); states: dict = {}
+        tg.handle_update(db, states, _msg(1, 888, "/start WRONGCOD"), fc)
+        assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == 888)).first() is None
         assert any("invalid or expired" in t for _, t in fc.sent)
-        # Link properly, then give a wrong unit.
-        tg.handle_update(db, states, _msg(2, chat, "/start GOOD2345"), fc)
-        tg.handle_update(db, states, _msg(3, chat, "/pti"), fc)
-        tg.handle_update(db, states, _msg(4, chat, "123"), fc)
-        assert states[chat].stage == "await_unit"  # still waiting
-        assert any("No truck" in t for _, t in fc.sent)
 
-    def test_link_code_and_pti_endpoints(self, client, db):
+    def test_link_code_and_status_endpoints(self, client, db):
         u, h = fleet_user(client, db, "tg4@example.com")
         r = client.post("/api/fleet/telegram/link-code", headers=h, json={"driver_name": "Sam"})
-        assert r.status_code == 200
+        assert r.status_code == 200 and len(r.json()["code"]) == 8
         code = r.json()["code"]
-        assert len(code) == 8
-        row = db.execute(select(DriverLinkCode).where(DriverLinkCode.code == code)).scalar_one()
-        assert row.owner_user_id == u.id and row.driver_name == "Sam"
+        assert db.execute(select(DriverLinkCode).where(DriverLinkCode.code == code)).scalar_one().driver_name == "Sam"
 
-        st = client.get("/api/fleet/telegram/status", headers=h).json()
-        assert st["linked_count"] == 0 and "configured" in st
-        # Drive one inspection through the bot, then it shows up in the list.
-        veh = Vehicle(owner_user_id=u.id, unit_number="500")
-        db.add(veh); db.commit()
         fc = FakeClient(); states: dict = {}; chat = 999
         tg.handle_update(db, states, _msg(1, chat, f"/start {code}"), fc)
-        tg.handle_update(db, states, _msg(2, chat, "/pti"), fc)
-        tg.handle_update(db, states, _msg(3, chat, "500"), fc)
-        uid = 10
-        for _ in range(len(tg.PTI_ITEMS)):
-            tg.handle_update(db, states, _cb(uid, chat, "pti:ok"), fc); uid += 1
-        pti_list = client.get("/api/fleet/pti", headers=h).json()
-        assert len(pti_list) == 1 and pti_list[0]["unit_number"] == "500" and pti_list[0]["result"] == "pass"
-        st2 = client.get("/api/fleet/telegram/status", headers=h).json()
-        assert st2["linked_count"] == 1
-        # Unlink the driver.
-        link_id = st2["drivers"][0]["id"]
+        st = client.get("/api/fleet/telegram/status", headers=h).json()
+        assert st["linked_count"] == 1
+
+        # A saved inspection (as the web app would create) shows in the list.
+        db.add(PreTripInspection(owner_user_id=u.id, unit_number="500", driver_name="Sam",
+                                 inspection_type="pre", result="pass", defect_count=0, items=[]))
+        db.commit()
+        lst = client.get("/api/fleet/pti", headers=h).json()
+        assert len(lst) == 1 and lst[0]["unit_number"] == "500" and lst[0]["inspection_type"] == "pre"
+
+        link_id = st["drivers"][0]["id"]
         assert client.delete(f"/api/fleet/telegram/links/{link_id}", headers=h).status_code == 204
         assert client.get("/api/fleet/telegram/status", headers=h).json()["linked_count"] == 0
 
     def test_code_is_single_use_per_chat(self, client, db):
         u, _ = fleet_user(client, db, "tg5@example.com")
-        db.add(DriverLinkCode(owner_user_id=u.id, code="ONCE2345"))
-        db.commit()
+        db.add(DriverLinkCode(owner_user_id=u.id, code="ONCE2345")); db.commit()
         fc = FakeClient(); states: dict = {}
-        # Chat A claims the code.
         tg.handle_update(db, states, _msg(1, 111, "/start ONCE2345"), fc)
         assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == 111)).first() is not None
-        # Same chat may re-use it (re-tap of the deep link).
-        tg.handle_update(db, states, _msg(2, 111, "/start ONCE2345"), fc)
+        tg.handle_update(db, states, _msg(2, 111, "/start ONCE2345"), fc)  # same chat re-taps: ok
         assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == 111)).first() is not None
-        # A different chat cannot.
-        tg.handle_update(db, states, _msg(3, 222, "/start ONCE2345"), fc)
+        tg.handle_update(db, states, _msg(3, 222, "/start ONCE2345"), fc)  # a different chat: rejected
         assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == 222)).first() is None
-        assert any("invalid or expired" in t for cid, t in fc.sent if cid == 222)
 
     def test_unlink_revokes_the_code(self, client, db):
         u, h = fleet_user(client, db, "tg6@example.com")
@@ -160,8 +98,7 @@ class TestTelegramPti:
         tg.handle_update(db, states, _msg(1, chat, f"/start {code}"), fc)
         link_id = client.get("/api/fleet/telegram/status", headers=h).json()["drivers"][0]["id"]
         assert client.delete(f"/api/fleet/telegram/links/{link_id}", headers=h).status_code == 204
-        # The same chat tries to re-link with the old code -> revoked, no link.
-        tg.handle_update(db, states, _msg(2, chat, f"/start {code}"), fc)
+        tg.handle_update(db, states, _msg(2, chat, f"/start {code}"), fc)  # revoked code
         assert client.get("/api/fleet/telegram/status", headers=h).json()["linked_count"] == 0
 
     def test_link_code_rejects_foreign_driver(self, client, db):

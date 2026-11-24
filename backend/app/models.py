@@ -645,9 +645,10 @@ class PreTripInspection(Base):
     unit_number: Mapped[str | None] = mapped_column(String(32))
     driver_name: Mapped[str | None] = mapped_column(String(128))
     chat_id: Mapped[int | None] = mapped_column(BigInteger)
+    inspection_type: Mapped[str] = mapped_column(String(8), default="pre")  # pre | post
     result: Mapped[str] = mapped_column(String(8))          # pass | fail
     defect_count: Mapped[int] = mapped_column(Integer, default=0)
-    items: Mapped[dict] = mapped_column(JSON, default=dict)  # [{key,label,status,note}]
+    items: Mapped[dict] = mapped_column(JSON, default=dict)  # [{key,label,status,note,photos}]
     performed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 

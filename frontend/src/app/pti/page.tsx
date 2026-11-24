@@ -8,12 +8,15 @@ import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 
-interface PtiItem { key: string; label: string; status: string; note: string }
+const MEDIA = process.env.NEXT_PUBLIC_API_URL ?? "";
+
+interface PtiItem { key: string; label: string; status: string; note: string; photos?: string[] }
 interface Pti {
   id: string;
   vehicle_id: string | null;
   unit_number: string | null;
   driver_name: string | null;
+  inspection_type: string;
   result: "pass" | "fail";
   defect_count: number;
   items: PtiItem[];
@@ -40,7 +43,9 @@ function PtiCard({ p }: { p: Pti }) {
           ) : <span className="rounded bg-mist px-2 py-0.5 text-sm font-bold text-steel">#{p.unit_number ?? "—"}</span>}
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">{p.driver_name ?? "Driver"}</span>
-            <span className="block text-xs text-faint">{fmt(p.performed_at)}</span>
+            <span className="block text-xs text-faint">
+              {p.inspection_type === "post" ? "Post-trip" : "Pre-trip"} · {fmt(p.performed_at)}
+            </span>
           </span>
         </span>
         <span className="shrink-0">
@@ -56,16 +61,28 @@ function PtiCard({ p }: { p: Pti }) {
       {open && (
         <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-sm">
           {p.items.map((i) => (
-            <li key={i.key} className="flex items-start justify-between gap-3">
-              <span className="min-w-0">
-                <span className={i.status === "defect" ? "font-medium text-danger" : "text-ink"}>{i.label}</span>
-                {i.note && <span className="block text-xs text-steel">{i.note}</span>}
-              </span>
-              <span className="shrink-0 text-xs font-semibold">
-                {i.status === "defect"
-                  ? <span className="text-danger">⚠️ Defect</span>
-                  : <span className="text-pine">✓ OK</span>}
-              </span>
+            <li key={i.key}>
+              <div className="flex items-start justify-between gap-3">
+                <span className="min-w-0">
+                  <span className={i.status === "defect" ? "font-medium text-danger" : "text-ink"}>{i.label}</span>
+                  {i.note && <span className="block text-xs text-steel">{i.note}</span>}
+                </span>
+                <span className="shrink-0 text-xs font-semibold">
+                  {i.status === "defect" ? <span className="text-danger">⚠️ Defect</span>
+                    : i.status === "skipped" ? <span className="text-faint">Skipped</span>
+                    : <span className="text-pine">✓ OK</span>}
+                </span>
+              </div>
+              {i.photos && i.photos.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  {i.photos.map((ph, n) => (
+                    <a key={n} href={`${MEDIA}${ph}`} target="_blank" rel="noopener noreferrer">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`${MEDIA}${ph}`} alt="" className="h-16 w-16 rounded-md object-cover" />
+                    </a>
+                  ))}
+                </div>
+              )}
             </li>
           ))}
         </ul>
