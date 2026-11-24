@@ -146,6 +146,9 @@ def _link(db: Session, chat_id: int, code: str, tg_name: str, tg_username: str |
             exp = exp.replace(tzinfo=timezone.utc)
         if exp < utcnow():
             return None
+    # Single-use: once a chat claims a code, only that chat may reuse it.
+    if row.used_by_chat_id is not None and row.used_by_chat_id != chat_id:
+        return None
     name = (row.driver_name or tg_name or "Driver").strip()
     link = db.execute(select(TelegramLink).where(TelegramLink.chat_id == chat_id)).scalar_one_or_none()
     if link is None:
@@ -156,6 +159,8 @@ def _link(db: Session, chat_id: int, code: str, tg_name: str, tg_username: str |
     link.driver_name = name
     link.telegram_username = tg_username
     link.linked_at = utcnow()
+    row.used_at = row.used_at or utcnow()
+    row.used_by_chat_id = chat_id
     db.commit()
     return link
 

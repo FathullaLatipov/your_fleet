@@ -123,4 +123,25 @@ class TestTelegramPti:
             tg.handle_update(db, states, _cb(uid, chat, "pti:ok"), fc); uid += 1
         pti_list = client.get("/api/fleet/pti", headers=h).json()
         assert len(pti_list) == 1 and pti_list[0]["unit_number"] == "500" and pti_list[0]["result"] == "pass"
-        assert client.get("/api/fleet/telegram/status", headers=h).json()["linked_count"] == 1
+        st2 = client.get("/api/fleet/telegram/status", headers=h).json()
+        assert st2["linked_count"] == 1
+        # Unlink the driver.
+        link_id = st2["drivers"][0]["id"]
+        assert client.delete(f"/api/fleet/telegram/links/{link_id}", headers=h).status_code == 204
+        assert client.get("/api/fleet/telegram/status", headers=h).json()["linked_count"] == 0
+
+    def test_code_is_single_use_per_chat(self, client, db):
+        u, _ = fleet_user(client, db, "tg5@example.com")
+        db.add(DriverLinkCode(owner_user_id=u.id, code="ONCE2345"))
+        db.commit()
+        fc = FakeClient(); states: dict = {}
+        # Chat A claims the code.
+        tg.handle_update(db, states, _msg(1, 111, "/start ONCE2345"), fc)
+        assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == 111)).first() is not None
+        # Same chat may re-use it (re-tap of the deep link).
+        tg.handle_update(db, states, _msg(2, 111, "/start ONCE2345"), fc)
+        assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == 111)).first() is not None
+        # A different chat cannot.
+        tg.handle_update(db, states, _msg(3, 222, "/start ONCE2345"), fc)
+        assert db.execute(select(TelegramLink).where(TelegramLink.chat_id == 222)).first() is None
+        assert any("invalid or expired" in t for cid, t in fc.sent if cid == 222)

@@ -248,7 +248,7 @@ interface TgStatus {
   configured: boolean;
   bot_username: string | null;
   linked_count: number;
-  drivers: { driver_name: string; telegram_username: string | null; linked_at: string }[];
+  drivers: { id: string; driver_name: string; telegram_username: string | null; linked_at: string }[];
 }
 interface LinkCode {
   code: string;
@@ -280,6 +280,9 @@ function TelegramPtiSection() {
   };
   const copy = (what: string, text: string) => {
     navigator.clipboard?.writeText(text).then(() => { setCopied(what); setTimeout(() => setCopied(""), 1500); }).catch(() => {});
+  };
+  const unlink = async (id: string) => {
+    try { await api(`/api/fleet/telegram/links/${id}`, { method: "DELETE" }); load(); } catch { /* ignore */ }
   };
 
   return (
@@ -338,12 +341,17 @@ function TelegramPtiSection() {
             Connected drivers ({status.linked_count})
           </p>
           <ul className="mt-2 space-y-1">
-            {status.drivers.map((d, i) => (
-              <li key={i} className="flex items-center justify-between gap-2 text-sm">
-                <span className="font-medium">{d.driver_name}
+            {status.drivers.map((d) => (
+              <li key={d.id} className="flex items-center justify-between gap-2 text-sm">
+                <span className="min-w-0 truncate font-medium">{d.driver_name}
                   {d.telegram_username && <span className="ml-1.5 text-steel">@{d.telegram_username}</span>}
                 </span>
-                <span className="text-xs text-faint">{new Date(d.linked_at).toLocaleDateString()}</span>
+                <span className="flex shrink-0 items-center gap-3">
+                  <span className="text-xs text-faint">{new Date(d.linked_at).toLocaleDateString()}</span>
+                  <button onClick={() => unlink(d.id)} className="text-xs font-semibold text-steel hover:text-danger">
+                    Unlink
+                  </button>
+                </span>
               </li>
             ))}
           </ul>

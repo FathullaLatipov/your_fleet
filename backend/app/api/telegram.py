@@ -3,6 +3,7 @@ link code, see connected drivers, and list submitted inspections."""
 from __future__ import annotations
 
 import secrets
+import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends
@@ -74,10 +75,20 @@ def telegram_status(owner: User = Depends(fleet_user), db: Session = Depends(get
         configured=bool(settings.telegram_bot_token),
         bot_username=username,
         linked_count=len(links),
-        drivers=[TelegramDriverOut(driver_name=l.driver_name,
+        drivers=[TelegramDriverOut(id=l.id, driver_name=l.driver_name,
                                    telegram_username=l.telegram_username,
                                    linked_at=l.linked_at) for l in links],
     )
+
+
+@router.delete("/telegram/links/{link_id}", status_code=204)
+def unlink_driver(link_id: uuid.UUID, owner: User = Depends(fleet_user),
+                  db: Session = Depends(get_db)):
+    """Disconnect a driver's Telegram chat from this carrier."""
+    row = db.get(TelegramLink, link_id)
+    if row is not None and row.owner_user_id == owner.id:
+        db.delete(row)
+        db.commit()
 
 
 @router.get("/pti", response_model=list[PtiOut])

@@ -654,6 +654,7 @@ class LinkCodeOut(BaseModel):
 
 
 class TelegramDriverOut(BaseModel):
+    id: uuid.UUID
     driver_name: str
     telegram_username: str | None
     linked_at: datetime

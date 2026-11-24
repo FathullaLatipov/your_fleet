@@ -189,6 +189,12 @@ def cmd_telegram_bot(args: argparse.Namespace) -> int:
     from app.services.telegram import TelegramClient, handle_update
 
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+
+    def _safe(e: Exception) -> str:
+        # httpx errors include the request URL, which embeds the bot token.
+        msg = str(e)
+        return msg.replace(token, "***") if token else msg
+
     states: dict = {}
     offset: int | None = None
     client = None
@@ -207,9 +213,9 @@ def cmd_telegram_bot(args: argparse.Namespace) -> int:
                     with SessionLocal() as db:
                         handle_update(db, states, u, client)
                 except Exception as e:  # noqa: BLE001 - one bad update mustn't stop the bot
-                    print(f"[{stamp}] telegram update failed: {type(e).__name__}: {e}", flush=True)
+                    print(f"[{stamp}] telegram update failed: {type(e).__name__}: {_safe(e)}", flush=True)
         except Exception as e:  # noqa: BLE001 - keep polling through transient errors
-            print(f"[{stamp}] telegram-bot error: {type(e).__name__}: {e}", flush=True)
+            print(f"[{stamp}] telegram-bot error: {type(e).__name__}: {_safe(e)}", flush=True)
             time.sleep(5)
 
 

@@ -608,6 +608,10 @@ class DriverLinkCode(Base):
     driver_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("fleet_drivers.id", ondelete="SET NULL"))
     driver_name: Mapped[str | None] = mapped_column(String(128))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Single-use: bound to the first chat that links with it. The same chat may
+    # re-use it (re-tap of the deep link); any other chat is rejected.
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    used_by_chat_id: Mapped[int | None] = mapped_column(BigInteger)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
