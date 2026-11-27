@@ -31,3 +31,6 @@ outreach*.csv
 
 # Reference video (not part of the app)
 backend/*.mp4
+
+# RingCentral app credentials (local only — real secret lives in VPS .env)
+keys.json

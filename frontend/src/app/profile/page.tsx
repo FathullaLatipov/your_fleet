@@ -7,6 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
+import { RC_CHANGE_EVENT, rcPhoneEnabled, setRcPhoneEnabled } from "@/lib/ringcentral";
 
 interface Integration {
   provider: string;
@@ -197,6 +198,67 @@ function ComingSoonCard({ integ }: { integ: Integration }) {
   );
 }
 
+/* RingCentral click-to-call via the Embeddable phone widget. There's no token
+   to store here — each user signs into their OWN RingCentral inside the phone
+   (bottom-right). This toggle just loads/hides that phone for this browser. */
+function RingCentralSection() {
+  const [on, setOn] = useState(false);
+  useEffect(() => {
+    const sync = () => setOn(rcPhoneEnabled());
+    sync();
+    window.addEventListener(RC_CHANGE_EVENT, sync);
+    return () => window.removeEventListener(RC_CHANGE_EVENT, sync);
+  }, []);
+
+  const toggle = () => setRcPhoneEnabled(!on);
+
+  return (
+    <section className="card p-5">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold">RingCentral — Calls</h3>
+          <p className="mt-0.5 text-sm text-steel">
+            Click-to-call shops, drivers and work-order contacts straight from the app, with calls
+            placed in your browser and logged in RingCentral.
+          </p>
+        </div>
+        <StatusBadge status={on ? "connected" : "disconnected"} />
+      </div>
+
+      <button
+        type="button"
+        onClick={toggle}
+        className="mt-4 flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-mist/40 px-4 py-3 text-left hover:bg-mist"
+      >
+        <span>
+          <span className="block text-sm font-semibold text-ink">Phone widget</span>
+          <span className="block text-xs text-steel">
+            {on
+              ? "On — the phone is in the bottom-right. Sign in with your RingCentral to start calling."
+              : "Off — turn on to show the RingCentral phone and enable Call buttons."}
+          </span>
+        </span>
+        <span
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors ${
+            on ? "bg-pine" : "bg-steel/30"
+          }`}
+        >
+          <span
+            className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+              on ? "translate-x-5" : "translate-x-0.5"
+            }`}
+          />
+        </span>
+      </button>
+
+      <p className="mt-2 text-xs text-faint">
+        Works per browser. Each teammate turns it on and signs into their own RingCentral — nothing
+        is shared between accounts.
+      </p>
+    </section>
+  );
+}
+
 function ProfileInner() {
   const { user } = useAuth();
   const [integrations, setIntegrations] = useState<Integration[] | null>(null);
@@ -255,7 +317,8 @@ function ProfileInner() {
         ) : (
           <div className="mt-4 space-y-4">
             <SamsaraAccountsSection />
-            {integrations.filter((i) => i.provider !== "samsara").map((i) =>
+            <RingCentralSection />
+            {integrations.filter((i) => i.provider !== "samsara" && i.provider !== "ringcentral").map((i) =>
               <ComingSoonCard key={i.provider} integ={i} />)}
           </div>
         )}

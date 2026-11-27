@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { CallButton } from "@/components/CallButton";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -400,6 +401,9 @@ function WorkOrderInner() {
             {q.eta && <span> · ETA: {q.eta}</span>}
           </p>
           {q.note && <p className="mt-1 text-sm text-steel">{q.note}</p>}
+          {q.shop_phone && (
+            <div className="mt-1.5"><CallButton phone={q.shop_phone} label="Call shop" compact /></div>
+          )}
         </div>
         {wo.status === "quote_received" && q.status === "pending" && (
           <div className="flex gap-2">
@@ -717,14 +721,15 @@ function WorkOrderInner() {
         <Stepper status={wo.status} />
         <p className="mt-4 whitespace-pre-wrap text-sm">{wo.description}</p>
         {wo.shop_name && wo.status !== "open" && (
-          <p className="mt-2 text-sm text-steel">
-            Shop: <span className="font-semibold text-ink">{wo.shop_name}</span>
+          <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-steel">
+            <span>Shop: <span className="font-semibold text-ink">{wo.shop_name}</span></span>
             {wo.business_id && (
-              <Link href={`/business/${wo.business_id}`} className="ml-2 text-xs font-semibold text-pine hover:underline">
+              <Link href={`/business/${wo.business_id}`} className="text-xs font-semibold text-pine hover:underline">
                 View profile
               </Link>
             )}
-          </p>
+            {wo.shop_phone && <CallButton phone={wo.shop_phone} label="Call shop" compact />}
+          </div>
         )}
       </section>
 

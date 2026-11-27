@@ -4,6 +4,7 @@ import { Inter, Space_Grotesk } from "next/font/google";
 import { AuthProvider } from "@/lib/auth";
 import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
+import { RingCentralPhone } from "@/components/RingCentralPhone";
 import "./globals.css";
 
 const inter = Inter({
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <Header />
           <main className="flex-1">{children}</main>
           <Footer />
+          <RingCentralPhone />
         </AuthProvider>
       </body>
     </html>

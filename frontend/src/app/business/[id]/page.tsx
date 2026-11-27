@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useState } from "react";
 
 import { BookingForm } from "@/components/BookingForm";
+import { CallButton } from "@/components/CallButton";
 import { Loader } from "@/components/Loader";
 import { ShopCover } from "@/components/ShopCover";
 import { ShopImage } from "@/components/ShopImage";
@@ -243,7 +244,8 @@ function BusinessPageInner() {
       <div className="card mt-4 flex flex-wrap items-center gap-x-5 gap-y-3 p-4">
         {address && <p className="text-[15px] text-steel">{address}</p>}
         <div className="ml-auto flex flex-wrap gap-2">
-          {b.phone && <a href={`tel:${b.phone}`} className="btn !py-2">Call {b.phone}</a>}
+          {b.phone && <CallButton phone={b.phone} label={`Call ${b.phone}`}
+                                   className="btn !py-2 inline-flex items-center gap-1.5" />}
           <a href={directions} target="_blank" rel="noopener noreferrer" className="btn-quiet !py-2">
             Directions
           </a>
@@ -356,7 +358,8 @@ function BusinessPageInner() {
                       : "this kind of shop"} — not confirmed by the owner yet. Call to check specifics.
                   </p>
                   {b.phone && (
-                    <a href={`tel:${b.phone}`} className="btn-quiet !py-1.5 text-sm">Call the shop</a>
+                    <CallButton phone={b.phone} label="Call the shop"
+                                className="btn-quiet !py-1.5 text-sm inline-flex items-center gap-1.5" />
                   )}
                 </div>
               </div>

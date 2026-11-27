@@ -110,11 +110,21 @@ def _set_unit_status(db: Session, wo: WorkOrder, in_repair: bool) -> None:
             t.status = TrailerStatus.IN_REPAIR if in_repair else TrailerStatus.ACTIVE
 
 
-def _quote_out(q: WorkOrderQuote) -> dict:
+def _biz_phone(db: Session, business_id) -> str | None:
+    """The repair shop's phone, for click-to-call — only when linked to a real
+    business in the directory (a free-typed shop name has no number)."""
+    if not business_id:
+        return None
+    biz = db.get(Business, business_id)
+    return biz.phone if biz else None
+
+
+def _quote_out(db: Session, q: WorkOrderQuote) -> dict:
     return {
         "id": str(q.id),
         "business_id": str(q.business_id) if q.business_id else None,
         "shop_name": q.shop_name,
+        "shop_phone": _biz_phone(db, q.business_id),
         "price_cents": q.price_cents,
         "eta": q.eta,
         "note": q.note,
@@ -146,6 +156,7 @@ def _wo_out(db: Session, wo: WorkOrder, detail: bool = False) -> dict:
         "driver_name": driver_name,
         "business_id": str(wo.business_id) if wo.business_id else None,
         "shop_name": wo.shop_name,
+        "shop_phone": _biz_phone(db, wo.business_id),
         "shop_confirmed_at": _iso(wo.shop_confirmed_at),
         "final_amount_cents": wo.final_amount_cents,
         "discount_cents": wo.discount_cents,
@@ -170,7 +181,7 @@ def _wo_out(db: Session, wo: WorkOrder, detail: bool = False) -> dict:
             .where(WorkOrderAttachment.work_order_id == wo.id)
             .order_by(WorkOrderAttachment.created_at)
         ).scalars().all()
-        out["quotes"] = [_quote_out(q) for q in quotes]
+        out["quotes"] = [_quote_out(db, q) for q in quotes]
         out["events"] = [{
             "id": str(e.id),
             "from_status": e.from_status,

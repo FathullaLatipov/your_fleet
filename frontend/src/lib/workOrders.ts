@@ -4,6 +4,7 @@ export interface WoQuote {
   id: string;
   business_id: string | null;
   shop_name: string;
+  shop_phone: string | null;
   price_cents: number | null;
   eta: string | null;
   note: string | null;
@@ -41,6 +42,7 @@ export interface WorkOrder {
   driver_name: string | null;
   business_id: string | null;
   shop_name: string | null;
+  shop_phone: string | null;
   shop_confirmed_at: string | null;
   final_amount_cents: number | null;
   discount_cents: number | null;

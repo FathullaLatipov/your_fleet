@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { AppShell } from "@/components/AppShell";
+import { CallButton } from "@/components/CallButton";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
@@ -235,6 +236,7 @@ function DriverRow({
         <span className="text-sm text-steel">
           {d.assigned_unit ? <>Drives <strong className="text-ink">#{d.assigned_unit}</strong></> : "No truck assigned"}
         </span>
+        {d.phone && <CallButton phone={d.phone} label="Call" compact />}
         <button className="btn-quiet !py-1.5 text-sm" onClick={() => (edit ? setEdit(false) : openEdit())}>
           {edit ? "Cancel" : "Edit"}
         </button>
