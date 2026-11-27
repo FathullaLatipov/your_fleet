@@ -639,6 +639,21 @@ class IntegrationTokenIn(BaseModel):
     token: str = Field(min_length=8, max_length=4096)
 
 
+class SamsaraAccountIn(BaseModel):
+    token: str = Field(min_length=8, max_length=4096)
+    label: str | None = Field(default=None, max_length=64)
+
+
+class SamsaraAccountOut(BaseModel):
+    id: uuid.UUID
+    label: str | None
+    status: str
+    token_last4: str | None
+    last_error: str | None = None
+    last_checked_at: datetime | None = None
+    connected_at: datetime | None = None
+
+
 # ---------------------------------------------------------------- telegram PTI
 
 class LinkCodeIn(BaseModel):

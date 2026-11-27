@@ -6,13 +6,20 @@ returned to the client — only a last-4 preview and connection status are.
 """
 from __future__ import annotations
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Integration, User, UserRole, utcnow
-from app.schemas import IntegrationOut, IntegrationTokenIn
+from app.schemas import (
+    IntegrationOut,
+    IntegrationTokenIn,
+    SamsaraAccountIn,
+    SamsaraAccountOut,
+)
 from app.security import require_roles
 from app.services import crypto
 from app.services import samsara as samsara_svc
@@ -41,8 +48,42 @@ PROVIDERS: dict[str, dict] = {
 
 
 def _rows(db: Session, owner: User) -> dict[str, Integration]:
-    return {r.provider: r for r in db.execute(
-        select(Integration).where(Integration.owner_user_id == owner.id)).scalars()}
+    # One representative row per provider for the catalog view; prefer a
+    # connected one (a provider like Samsara may have several accounts).
+    out: dict[str, Integration] = {}
+    for r in db.execute(
+        select(Integration).where(Integration.owner_user_id == owner.id)
+        .order_by(Integration.created_at)
+    ).scalars():
+        cur = out.get(r.provider)
+        if cur is None or (cur.status != "connected" and r.status == "connected"):
+            out[r.provider] = r
+    return out
+
+
+def _samsara_rows(db: Session, owner: User) -> list[Integration]:
+    return db.execute(
+        select(Integration).where(
+            Integration.owner_user_id == owner.id, Integration.provider == "samsara")
+        .order_by(Integration.created_at)
+    ).scalars().all()
+
+
+def _acct_out(row: Integration) -> SamsaraAccountOut:
+    return SamsaraAccountOut(
+        id=row.id, label=row.label, status=row.status, token_last4=row.token_last4,
+        last_error=row.last_error, last_checked_at=row.last_checked_at,
+        connected_at=row.connected_at)
+
+
+def _first_sync(db: Session, owner: User, token: str) -> None:
+    """Best-effort first Samsara sync so the fleet shows data right away."""
+    try:
+        c = samsara_svc.client_for(token)
+        samsara_svc.sync_samsara(db, owner, vehicles_fn=c.vehicles, stats_fn=c.stats,
+                                 defects_fn=c.open_defects, faults_fn=c.faults)
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def _out(provider: str, meta: dict, row: Integration | None) -> IntegrationOut:
@@ -72,12 +113,68 @@ def list_integrations(owner: User = Depends(owner_user), db: Session = Depends(g
     return [_out(p, meta, rows.get(p)) for p, meta in PROVIDERS.items()]
 
 
+# -------- Samsara: multiple accounts per carrier, their data merges into the fleet
+
+@router.get("/samsara/accounts", response_model=list[SamsaraAccountOut])
+def list_samsara_accounts(owner: User = Depends(owner_user), db: Session = Depends(get_db)):
+    return [_acct_out(r) for r in _samsara_rows(db, owner)]
+
+
+@router.post("/samsara/accounts", response_model=SamsaraAccountOut, status_code=201)
+def add_samsara_account(body: SamsaraAccountIn, owner: User = Depends(owner_user),
+                        db: Session = Depends(get_db)):
+    token = body.token.strip()
+    ok, err = samsara_svc.check_token(token)
+    if not ok:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, err or "Couldn't connect.")
+    existing = _samsara_rows(db, owner)
+    label = (body.label or "").strip() or ("Samsara" if not existing else f"Samsara #{len(existing) + 1}")
+    now = utcnow()
+    row = Integration(
+        owner_user_id=owner.id, provider="samsara", label=label,
+        token_encrypted=crypto.encrypt(token), token_last4=crypto.last4(token),
+        status="connected", connected_at=now, last_checked_at=now)
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    _first_sync(db, owner, token)
+    return _acct_out(row)
+
+
+@router.post("/samsara/accounts/{account_id}/test", response_model=SamsaraAccountOut)
+def test_samsara_account(account_id: uuid.UUID, owner: User = Depends(owner_user),
+                         db: Session = Depends(get_db)):
+    row = db.get(Integration, account_id)
+    if row is None or row.owner_user_id != owner.id or row.provider != "samsara":
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Account not found")
+    token = crypto.decrypt(row.token_encrypted)
+    ok, err = (False, "Stored token couldn't be read.") if token is None else samsara_svc.check_token(token)
+    row.last_checked_at = utcnow()
+    row.status = "connected" if ok else "error"
+    row.last_error = None if ok else err
+    db.commit()
+    db.refresh(row)
+    return _acct_out(row)
+
+
+@router.delete("/samsara/accounts/{account_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_samsara_account(account_id: uuid.UUID, owner: User = Depends(owner_user),
+                           db: Session = Depends(get_db)):
+    row = db.get(Integration, account_id)
+    if row is not None and row.owner_user_id == owner.id and row.provider == "samsara":
+        db.delete(row)
+        db.commit()
+
+
 @router.put("/{provider}", response_model=IntegrationOut)
 def connect(provider: str, body: IntegrationTokenIn,
             owner: User = Depends(owner_user), db: Session = Depends(get_db)):
     meta = PROVIDERS.get(provider)
     if meta is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Unknown integration")
+    if provider == "samsara":
+        raise HTTPException(status.HTTP_400_BAD_REQUEST,
+                            "Use /api/integrations/samsara/accounts to add a Samsara account.")
     if not meta["available"]:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{meta['label']} isn't available yet.")
 

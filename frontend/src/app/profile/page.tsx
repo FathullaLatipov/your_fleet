@@ -47,50 +47,71 @@ function StatusBadge({ status }: { status: string }) {
   return <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${cls}`}>{label}</span>;
 }
 
-/* Samsara is the one live integration: paste a token, we validate it against
-   Samsara and sync the fleet with that company's own token. */
-function SamsaraCard({ integ, onChange }: { integ: Integration; onChange: (i: Integration) => void }) {
-  const [token, setToken] = useState("");
-  const [busy, setBusy] = useState<"" | "connect" | "test" | "disconnect">("");
-  const [err, setErr] = useState<string | null>(null);
-  const connected = integ.status === "connected";
+interface SamsaraAccount {
+  id: string;
+  label: string | null;
+  status: string;
+  token_last4: string | null;
+  last_error: string | null;
+  last_checked_at: string | null;
+  connected_at: string | null;
+}
 
-  const connect = async () => {
+/* Samsara (multi-account): a carrier can connect more than one Samsara org;
+   their data merges into the fleet. The second+ are optional. */
+function SamsaraAccountsSection() {
+  const [accounts, setAccounts] = useState<SamsaraAccount[] | null>(null);
+  const [token, setToken] = useState("");
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(""); // "add" | `test:${id}` | `del:${id}`
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    api<SamsaraAccount[]>("/api/integrations/samsara/accounts").then(setAccounts).catch(() => setAccounts([]));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const add = async () => {
     if (!token.trim()) return;
-    setBusy("connect"); setErr(null);
+    setBusy("add"); setErr(null);
     try {
-      const r = await api<Integration>("/api/integrations/samsara", { method: "PUT", body: { token: token.trim() } });
-      onChange(r); setToken("");
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : "Couldn't connect");
-    } finally { setBusy(""); }
+      await api("/api/integrations/samsara/accounts", {
+        method: "POST", body: { token: token.trim(), label: label.trim() || undefined },
+      });
+      setToken(""); setLabel(""); load();
+    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't connect"); }
+    finally { setBusy(""); }
   };
-  const retest = async () => {
-    setBusy("test"); setErr(null);
-    try { onChange(await api<Integration>("/api/integrations/samsara/test", { method: "POST" })); }
+  const retest = async (id: string) => {
+    setBusy(`test:${id}`); setErr(null);
+    try { await api(`/api/integrations/samsara/accounts/${id}/test`, { method: "POST" }); load(); }
     catch (e) { setErr(e instanceof Error ? e.message : "Check failed"); }
     finally { setBusy(""); }
   };
-  const disconnect = async () => {
-    setBusy("disconnect"); setErr(null);
-    try {
-      await api("/api/integrations/samsara", { method: "DELETE" });
-      onChange({ ...integ, status: "disconnected", token_last4: null, connected_at: null, last_error: null });
-    } catch (e) { setErr(e instanceof Error ? e.message : "Couldn't disconnect"); }
-    finally { setBusy(""); }
+  const remove = async (id: string) => {
+    setBusy(`del:${id}`);
+    try { await api(`/api/integrations/samsara/accounts/${id}`, { method: "DELETE" }); load(); }
+    catch { /* ignore */ } finally { setBusy(""); }
   };
+
+  const hasAny = (accounts?.length ?? 0) > 0;
+  const topStatus = hasAny
+    ? (accounts!.some((a) => a.status === "connected") ? "connected" : "error")
+    : "disconnected";
 
   return (
     <section className="card p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h3 className="text-lg font-bold">Samsara</h3>
-          <p className="mt-0.5 text-sm text-steel">{integ.description}</p>
+          <p className="mt-0.5 text-sm text-steel">
+            Live GPS, odometer, fuel level and engine fault codes per truck. Connect more than one
+            Samsara account — their data merges into your fleet.
+          </p>
         </div>
-        <StatusBadge status={integ.status} />
+        <StatusBadge status={topStatus} />
       </div>
 
-      {/* Feature bullets, like the connect screen */}
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
         {SAMSARA_FEATURES.map(([title, sub]) => (
           <div key={title} className="rounded-lg border border-line bg-mist/40 p-3">
@@ -100,53 +121,59 @@ function SamsaraCard({ integ, onChange }: { integ: Integration; onChange: (i: In
         ))}
       </div>
 
-      {connected ? (
-        <div className="mt-4 rounded-lg border border-pine/30 bg-pine-wash/50 p-4">
-          <p className="text-sm font-semibold text-pine">Connected and syncing.</p>
-          <p className="mt-1 text-sm text-steel">
-            Token ending <span className="font-mono">••••{integ.token_last4}</span> ·
-            last checked {ago(integ.last_checked_at)}
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <button onClick={retest} disabled={busy !== ""} className="btn-quiet !py-1.5 text-sm">
-              {busy === "test" ? "Checking…" : "Re-check"}
-            </button>
-            <button onClick={disconnect} disabled={busy !== ""} className="btn-danger !py-1.5 text-sm">
-              {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-4">
-          <p className="text-sm font-semibold">Connect Samsara</p>
-          <p className="mt-0.5 text-sm text-steel">
-            Enter your Samsara API token to sync your fleet. We&apos;ll pull real-time location,
-            fuel level and fuel consumption for each vehicle.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-2">
-            <input
-              className="field min-w-0 flex-1"
-              placeholder="Paste your Samsara API token"
-              value={token}
-              onChange={(e) => setToken(e.target.value)}
-              type="password"
-              autoComplete="off"
-            />
-            <button onClick={connect} disabled={busy !== "" || !token.trim()} className="btn">
-              {busy === "connect" ? "Connecting…" : "Connect & Sync"}
-            </button>
-          </div>
-          <p className="mt-2 text-xs text-steel">
-            Find your API token in Samsara under Settings → API Tokens.{" "}
-            <a href="https://developers.samsara.com/docs/authentication" target="_blank"
-               rel="noopener noreferrer" className="font-semibold text-cta hover:underline">Learn more</a>
-          </p>
+      {accounts === null ? (
+        <p className="mt-4 text-sm text-faint">Loading…</p>
+      ) : accounts.length > 0 && (
+        <div className="mt-4 space-y-2">
+          {accounts.map((a) => (
+            <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-line bg-mist/40 p-3">
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">
+                  {a.label || "Samsara"}
+                  {a.status === "connected"
+                    ? <span className="ml-2 rounded-full bg-pine-wash px-2 py-0.5 text-xs font-semibold text-pine">Connected</span>
+                    : <span className="ml-2 rounded-full bg-danger-wash px-2 py-0.5 text-xs font-semibold text-danger">Needs attention</span>}
+                </p>
+                <p className="mt-0.5 text-xs text-steel">
+                  Token <span className="font-mono">••••{a.token_last4}</span> · checked {ago(a.last_checked_at)}
+                  {a.status !== "connected" && a.last_error ? ` · ${a.last_error}` : ""}
+                </p>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <button onClick={() => retest(a.id)} disabled={busy !== ""} className="btn-quiet !py-1.5 text-sm">
+                  {busy === `test:${a.id}` ? "Checking…" : "Re-check"}
+                </button>
+                <button onClick={() => remove(a.id)} disabled={busy !== ""} className="btn-danger !py-1.5 text-sm">
+                  {busy === `del:${a.id}` ? "…" : "Disconnect"}
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
-      {(err || (integ.status === "error" && integ.last_error)) && (
-        <p className="mt-3 text-sm font-medium text-danger">{err ?? integ.last_error}</p>
-      )}
+      <div className="mt-4 border-t border-line pt-4">
+        <p className="text-sm font-semibold">{hasAny ? "Add another Samsara account" : "Connect Samsara"}</p>
+        <p className="mt-0.5 text-sm text-steel">
+          Enter a Samsara API token to sync that account into your fleet{hasAny ? " — a second org is optional" : ""}.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input className="field min-w-0 flex-1" placeholder="Paste your Samsara API token" value={token}
+                 onChange={(e) => setToken(e.target.value)} type="password" autoComplete="off" />
+          <input className="field !w-40" placeholder="Label (optional)" value={label}
+                 onChange={(e) => setLabel(e.target.value)} />
+          <button onClick={add} disabled={busy !== "" || !token.trim()} className="btn">
+            {busy === "add" ? "Connecting…" : "Connect & Sync"}
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-steel">
+          Find your API token in Samsara under Settings → API Tokens.{" "}
+          <a href="https://developers.samsara.com/docs/authentication" target="_blank"
+             rel="noopener noreferrer" className="font-semibold text-cta hover:underline">Learn more</a>
+        </p>
+      </div>
+
+      {err && <p className="mt-3 text-sm font-medium text-danger">{err}</p>}
     </section>
   );
 }
@@ -181,9 +208,6 @@ function ProfileInner() {
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"));
   }, []);
   useEffect(() => { if (user) load(); }, [user, load]);
-
-  const onChange = (updated: Integration) =>
-    setIntegrations((cur) => cur?.map((i) => (i.provider === updated.provider ? updated : i)) ?? null);
 
   if (!user) return <div className="p-10"><Loader /></div>;
 
@@ -230,11 +254,9 @@ function ProfileInner() {
           <div className="mt-4"><Loader /></div>
         ) : (
           <div className="mt-4 space-y-4">
-            {integrations.map((i) =>
-              i.provider === "samsara"
-                ? <SamsaraCard key={i.provider} integ={i} onChange={onChange} />
-                : <ComingSoonCard key={i.provider} integ={i} />,
-            )}
+            <SamsaraAccountsSection />
+            {integrations.filter((i) => i.provider !== "samsara").map((i) =>
+              <ComingSoonCard key={i.provider} integ={i} />)}
           </div>
         )}
 

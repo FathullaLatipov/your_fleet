@@ -92,13 +92,15 @@ class Integration(Base):
 
     Each company connects its own token, so sync runs per-tenant. The token is
     stored encrypted (app.services.crypto); only a last-4 preview is kept in
-    clear for display. One row per (owner, provider)."""
+    clear for display. A carrier may connect SEVERAL accounts of one provider
+    (e.g. two Samsara orgs) — one row each; their data merges into the fleet."""
     __tablename__ = "integrations"
 
     id: Mapped[uuid.UUID] = pk()
     owner_user_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), index=True)
     provider: Mapped[str] = mapped_column(String(32))  # samsara | ringcentral | fuel
+    label: Mapped[str | None] = mapped_column(String(64))  # e.g. "Samsara #2"
     token_encrypted: Mapped[str | None] = mapped_column(Text)
     token_last4: Mapped[str | None] = mapped_column(String(8))
     status: Mapped[str] = mapped_column(String(16), default="disconnected")  # connected|error|disconnected
@@ -110,7 +112,7 @@ class Integration(Base):
         DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     __table_args__ = (
-        UniqueConstraint("owner_user_id", "provider", name="uq_integration_owner_provider"),
+        Index("ix_integration_owner_provider", "owner_user_id", "provider"),
     )
 
 

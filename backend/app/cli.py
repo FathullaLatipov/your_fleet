@@ -131,9 +131,10 @@ def cmd_samsara_loop(args: argparse.Namespace) -> int:
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
         try:
             with SessionLocal() as db:
-                # (owner, client, source) per tenant to sync.
+                # (owner, client, source) per tenant to sync. A carrier may have
+                # several Samsara accounts — sync each; their data merges.
                 targets: list[tuple[User, SamsaraClient, str]] = []
-                seen: set = set()
+                owner_tokens: dict = {}  # owner_id -> set of tokens already queued
                 rows = db.execute(
                     select(Integration).where(
                         Integration.provider == "samsara",
@@ -146,11 +147,12 @@ def cmd_samsara_loop(args: argparse.Namespace) -> int:
                     if not token or owner is None:
                         continue
                     targets.append((owner, SamsaraClient(token), "integration"))
-                    seen.add(owner.id)
-                # Legacy env fallback (only if that owner hasn't connected in-app).
+                    owner_tokens.setdefault(owner.id, set()).add(token)
+                # Legacy env token is ADDITIVE: sync it too, unless the same owner
+                # already has it connected in-app (avoid a double sync).
                 if env_owner_email and env_token:
                     owner = _find_user(db, env_owner_email)
-                    if owner is not None and owner.id not in seen:
+                    if owner is not None and env_token not in owner_tokens.get(owner.id, set()):
                         targets.append((owner, SamsaraClient(env_token), "env"))
 
                 if not targets:
