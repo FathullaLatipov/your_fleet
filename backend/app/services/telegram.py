@@ -28,7 +28,7 @@ API = "https://api.telegram.org"
 
 # The pre-trip checklist. (key, label) — keep labels <= 64 chars (defect_type).
 PTI_ITEMS: list[tuple[str, str]] = [
-    ("brakes", "Brakes (service & parking)"),
+    ("brakes", "Brakes"),
     ("tires", "Tires & wheels"),
     ("lights", "Lights & signals"),
     ("leaks", "Leaks / fluid levels"),
