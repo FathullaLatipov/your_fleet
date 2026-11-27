@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # link with a per-company code). Create it in @BotFather.
     telegram_bot_token: str = ""
     telegram_bot_username: str = ""  # without @, for deep links (t.me/<username>)
+    # Gemini vision for suggesting defects from inspection photos (optional).
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
 
     @property
     def cors_origin_list(self) -> list[str]:

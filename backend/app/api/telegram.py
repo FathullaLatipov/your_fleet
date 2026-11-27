@@ -9,12 +9,14 @@ from datetime import timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import get_settings
 from app.db import get_db
 from app.models import (
     DriverLinkCode,
     FleetDriver,
+    InspectionDefect,
     PreTripInspection,
     TelegramLink,
     User,
@@ -111,3 +113,54 @@ def list_pti(owner: User = Depends(fleet_user), db: Session = Depends(get_db)):
         .order_by(PreTripInspection.performed_at.desc()).limit(200)
     ).scalars().all()
     return [PtiOut.model_validate(r) for r in rows]
+
+
+def _owned_pti(pti_id: uuid.UUID, owner: User, db: Session) -> PreTripInspection:
+    pti = db.get(PreTripInspection, pti_id)
+    if pti is None or pti.owner_user_id != owner.id:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Inspection not found")
+    return pti
+
+
+@router.post("/pti/{pti_id}/items/{item_key}/confirm", response_model=PtiOut)
+def confirm_pti_item(pti_id: uuid.UUID, item_key: str, owner: User = Depends(fleet_user),
+                     db: Session = Depends(get_db)):
+    """Accept an AI-suggested defect on one item: mark it a defect and open a
+    defect on the truck."""
+    pti = _owned_pti(pti_id, owner, db)
+    items = pti.items or []
+    it = next((x for x in items if x.get("key") == item_key), None)
+    if it is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Item not found")
+    ai = it.get("ai") or {}
+    it["status"] = "defect"
+    if not it.get("note"):
+        it["note"] = ai.get("description") or ""
+    severity = ai.get("severity") or "major"
+    it.pop("ai", None)
+    pti.defect_count = sum(1 for x in items if x.get("status") == "defect")
+    pti.result = "fail"
+    flag_modified(pti, "items")
+    if pti.vehicle_id is not None:
+        db.add(InspectionDefect(
+            vehicle_id=pti.vehicle_id, source="telegram_pti",
+            defect_type=(it.get("label") or item_key)[:64],
+            comment=it.get("note") or None, severity=severity))
+    db.commit()
+    db.refresh(pti)
+    return PtiOut.model_validate(pti)
+
+
+@router.post("/pti/{pti_id}/items/{item_key}/dismiss", response_model=PtiOut)
+def dismiss_pti_item(pti_id: uuid.UUID, item_key: str, owner: User = Depends(fleet_user),
+                     db: Session = Depends(get_db)):
+    """Dismiss an AI suggestion on one item (no defect)."""
+    pti = _owned_pti(pti_id, owner, db)
+    items = pti.items or []
+    it = next((x for x in items if x.get("key") == item_key), None)
+    if it is not None and it.get("ai") is not None:
+        it.pop("ai", None)
+        flag_modified(pti, "items")
+        db.commit()
+    db.refresh(pti)
+    return PtiOut.model_validate(pti)

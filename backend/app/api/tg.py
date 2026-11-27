@@ -9,14 +9,24 @@ import json
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    UploadFile,
+    status,
+)
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from app.config import get_settings
-from app.db import get_db
+from app.db import SessionLocal, get_db
 from app.models import InspectionDefect, PreTripInspection, TelegramLink, Vehicle, utcnow
+from app.services import gemini
 from app.services import telegram as tg
 
 router = APIRouter(prefix="/api/tg", tags=["telegram-webapp"])
@@ -66,8 +76,39 @@ def context(init_data: str = Form(...), db: Session = Depends(get_db)):
     }
 
 
+def _analyze_pti(pti_id) -> None:
+    """Background: ask Gemini about each photographed item and attach a defect
+    SUGGESTION (never a confirmed defect) for the manager to review."""
+    media_root = Path(get_settings().media_dir)
+    with SessionLocal() as db:
+        pti = db.get(PreTripInspection, pti_id)
+        if pti is None:
+            return
+        items = pti.items or []
+        changed = False
+        for it in items:
+            if it.get("status") == "defect":  # driver already flagged it
+                continue
+            photos = it.get("photos") or []
+            if not photos:
+                continue
+            fpath = media_root / photos[0].replace("/media/", "", 1)
+            try:
+                content = fpath.read_bytes()
+            except OSError:
+                continue
+            res = gemini.analyze_photo(content, it.get("label") or it.get("key") or "truck part")
+            if res and res.get("defect"):
+                it["ai"] = res
+                changed = True
+        if changed:
+            flag_modified(pti, "items")
+            db.commit()
+
+
 @router.post("/submit")
-async def submit(init_data: str = Form(...), payload: str = Form(...),
+async def submit(background: BackgroundTasks,
+                 init_data: str = Form(...), payload: str = Form(...),
                  photos: list[UploadFile] = File(default=[]),
                  db: Session = Depends(get_db)):
     link = _driver(init_data, db)
@@ -138,4 +179,7 @@ async def submit(init_data: str = Form(...), payload: str = Form(...),
                 vehicle_id=vehicle.id, source="telegram_pti",
                 defect_type=d["label"][:64], comment=d.get("note") or None, severity="major"))
     db.commit()
+    # Best-effort AI review of the photos (suggestions only), off the request path.
+    if saved and gemini.is_configured():
+        background.add_task(_analyze_pti, pti.id)
     return {"ok": True, "result": result, "defects": len(defects), "photos": saved}

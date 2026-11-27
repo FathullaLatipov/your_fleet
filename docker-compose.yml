@@ -43,6 +43,8 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-https://your-fleet.vercel.app}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_BOT_USERNAME: ${TELEGRAM_BOT_USERNAME:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       ENVIRONMENT: production
       MEDIA_DIR: /app/media
     ports:

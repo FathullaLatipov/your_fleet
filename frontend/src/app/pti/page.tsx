@@ -10,7 +10,8 @@ import { useAuth } from "@/lib/auth";
 
 const MEDIA = process.env.NEXT_PUBLIC_API_URL ?? "";
 
-interface PtiItem { key: string; label: string; status: string; note: string; photos?: string[] }
+interface AiSuggestion { defect: boolean; severity: string | null; description: string }
+interface PtiItem { key: string; label: string; status: string; note: string; photos?: string[]; ai?: AiSuggestion }
 interface Pti {
   id: string;
   vehicle_id: string | null;
@@ -28,9 +29,17 @@ function fmt(iso: string) {
     { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
-function PtiCard({ p }: { p: Pti }) {
+function PtiCard({ p, reload }: { p: Pti; reload: () => void }) {
   const [open, setOpen] = useState(false);
-  const defects = p.items.filter((i) => i.status === "defect");
+  const [busy, setBusy] = useState("");
+  const aiCount = p.items.filter((i) => i.ai?.defect).length;
+
+  const act = async (key: string, action: "confirm" | "dismiss") => {
+    setBusy(`${action}:${key}`);
+    try { await api(`/api/fleet/pti/${p.id}/items/${key}/${action}`, { method: "POST" }); reload(); }
+    catch { /* ignore */ } finally { setBusy(""); }
+  };
+
   return (
     <div className="card p-4">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-center justify-between gap-3 text-left">
@@ -48,7 +57,12 @@ function PtiCard({ p }: { p: Pti }) {
             </span>
           </span>
         </span>
-        <span className="shrink-0">
+        <span className="flex shrink-0 items-center gap-2">
+          {aiCount > 0 && (
+            <span className="rounded-full bg-amber-wash px-2 py-0.5 text-xs font-semibold text-amber-ink">
+              ⚡ AI: {aiCount}
+            </span>
+          )}
           {p.result === "pass" ? (
             <span className="rounded-full bg-pine-wash px-2.5 py-0.5 text-xs font-semibold text-pine">Passed</span>
           ) : (
@@ -59,7 +73,7 @@ function PtiCard({ p }: { p: Pti }) {
         </span>
       </button>
       {open && (
-        <ul className="mt-3 space-y-1.5 border-t border-line pt-3 text-sm">
+        <ul className="mt-3 space-y-2.5 border-t border-line pt-3 text-sm">
           {p.items.map((i) => (
             <li key={i.key}>
               <div className="flex items-start justify-between gap-3">
@@ -81,6 +95,24 @@ function PtiCard({ p }: { p: Pti }) {
                       <img src={`${MEDIA}${ph}`} alt="" className="h-16 w-16 rounded-md object-cover" />
                     </a>
                   ))}
+                </div>
+              )}
+              {i.ai?.defect && (
+                <div className="mt-1.5 rounded-lg border border-amber/40 bg-amber-wash/50 p-2.5">
+                  <p className="text-xs font-semibold text-amber-ink">
+                    ⚡ AI suggests a possible defect{i.ai.severity ? ` (${i.ai.severity})` : ""}
+                  </p>
+                  {i.ai.description && <p className="mt-0.5 text-xs text-steel">{i.ai.description}</p>}
+                  <div className="mt-2 flex gap-2">
+                    <button onClick={() => act(i.key, "confirm")} disabled={busy !== ""}
+                            className="btn-danger !py-1 !px-2.5 text-xs">
+                      {busy === `confirm:${i.key}` ? "…" : "Confirm defect"}
+                    </button>
+                    <button onClick={() => act(i.key, "dismiss")} disabled={busy !== ""}
+                            className="btn-quiet !py-1 !px-2.5 text-xs">
+                      {busy === `dismiss:${i.key}` ? "…" : "Dismiss"}
+                    </button>
+                  </div>
                 </div>
               )}
             </li>
@@ -142,7 +174,7 @@ function PtiInner() {
         </p>
       ) : (
         <div className="mt-5 space-y-2.5">
-          {shown.map((p) => <PtiCard key={p.id} p={p} />)}
+          {shown.map((p) => <PtiCard key={p.id} p={p} reload={load} />)}
         </div>
       )}
     </div>
