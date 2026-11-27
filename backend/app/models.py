@@ -448,6 +448,10 @@ class VehicleExpense(Base):
     category: Mapped[ExpenseCategory] = mapped_column(
         str_enum(ExpenseCategory), default=ExpenseCategory.OTHER
     )
+    # The work-order service type this cost came from (repair/pm/roadside/…),
+    # when it was created by closing a work order. None for manual receipts,
+    # which carry their type in `category` instead.
+    service_type: Mapped[str | None] = mapped_column(String(32))
     description: Mapped[str] = mapped_column(String(255))
     amount_cents: Mapped[int] = mapped_column(Integer)
     odometer_miles: Mapped[float | None] = mapped_column(Float)

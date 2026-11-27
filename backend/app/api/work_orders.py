@@ -646,6 +646,7 @@ def close_work_order(wo_id: uuid.UUID, body: CloseIn,
         db.add(VehicleExpense(
             vehicle_id=wo.vehicle_id, business_id=wo.business_id,
             category=ExpenseCategory.REPAIR,
+            service_type=wo.service_type.value,  # keep the chosen type for reports
             description=f"WO-{wo.wo_number}: {wo.description[:200]}"
                         + (f" ({wo.shop_name})" if wo.shop_name else ""),
             amount_cents=body.final_amount_cents,

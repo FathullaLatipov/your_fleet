@@ -7,7 +7,7 @@ import { AppShell } from "@/components/AppShell";
 import { Loader } from "@/components/Loader";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
-import { EXPENSE_LABELS, fmtUsd } from "@/lib/types";
+import { fmtUsd } from "@/lib/types";
 
 /* Contract for /api/fleet/service-records. */
 interface ServiceRecord {
@@ -17,6 +17,8 @@ interface ServiceRecord {
   kind: "marketplace" | "logged";
   description: string;
   category: string | null;
+  service_type: string | null;
+  type_label: string;
   amount_cents: number | null;
   odometer_miles: number | null;
   booking_id: string | null;
@@ -209,8 +211,8 @@ function ServiceRecordsInner() {
                         </span>
                       )}
                       {r.description}
-                      {r.category && EXPENSE_LABELS[r.category] && (
-                        <span className="ml-1.5 text-xs text-faint">{EXPENSE_LABELS[r.category]}</span>
+                      {r.kind === "logged" && r.type_label && (
+                        <span className="ml-1.5 text-xs text-faint">{r.type_label}</span>
                       )}
                     </td>
                     <td className="py-2.5 pr-3 text-steel">{r.shop_name ?? "Logged manually"}</td>

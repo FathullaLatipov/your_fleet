@@ -13,7 +13,7 @@ COLUMNS = ["Date", "Unit", "Type", "Description", "Where", "Odometer (mi)", "Amo
 def _flat(rec: dict) -> list:
     date = rec["date"][:10] if rec.get("date") else ""
     where = rec.get("shop_name") or ("Logged manually" if rec["kind"] == "logged" else "")
-    kind = "Marketplace" if rec["kind"] == "marketplace" else (rec.get("category") or "logged").replace("_", " ")
+    kind = rec.get("type_label") or ("Marketplace" if rec["kind"] == "marketplace" else "Logged")
     return [
         date,
         f"#{rec['unit_number']}" if rec.get("unit_number") else "",

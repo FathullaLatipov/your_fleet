@@ -411,6 +411,26 @@ LOGGED_SERVICE_CATEGORIES = (
     ExpenseCategory.OIL_SERVICE, ExpenseCategory.TIRES,
 )
 
+# Human labels for a work order's service type (what the user picked on the WO).
+# Single source of truth — fleet_reports imports this.
+SERVICE_TYPE_LABELS = {
+    "repair": "Repair", "pm": "PM", "inspection": "Inspection",
+    "roadside": "Roadside service", "towing": "Towing", "parking": "Parking",
+    "truck_wash": "Truck wash", "order_parts": "Order parts",
+}
+
+
+def _service_type_label(kind: str, service_type: str | None, category: str | None) -> str:
+    """The "Type" shown for a service record: the work-order service type the
+    user chose when it came from a WO, else the manual expense category."""
+    if kind == "marketplace":
+        return "Marketplace"
+    if service_type:
+        return SERVICE_TYPE_LABELS.get(service_type, service_type.replace("_", " ").title())
+    if category:
+        return category.replace("_", " ").title()
+    return "Logged"
+
 
 def _collect_service_records(
     db: Session,
@@ -445,6 +465,8 @@ def _collect_service_records(
             "kind": "marketplace",
             "description": b.issue_description,
             "category": None,
+            "service_type": None,
+            "type_label": "Marketplace",
             "amount_cents": b.final_price_cents,
             "odometer_miles": None,
             "booking_id": str(b.id),
@@ -472,6 +494,8 @@ def _collect_service_records(
                 "kind": "logged",
                 "description": e.description,
                 "category": e.category.value,
+                "service_type": e.service_type,
+                "type_label": _service_type_label("logged", e.service_type, e.category.value),
                 "amount_cents": e.amount_cents,
                 "odometer_miles": e.odometer_miles,
                 "booking_id": None,

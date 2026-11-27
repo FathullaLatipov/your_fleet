@@ -8,15 +8,35 @@ PDF = b"%PDF-1.4 fake invoice bytes"
 JPG = b"\xff\xd8\xff\xe0" + b"\x00" * 16
 
 
-def make_wo(client, db, email, unit="WO1"):
+def make_wo(client, db, email, unit="WO1", service_type="repair"):
     owner, h = fleet_user(client, db, email)
     v = add_vehicle(client, h, unit=unit)
     r = client.post(BASE, headers=h, json={
-        "vehicle_id": v["id"], "service_type": "repair",
+        "vehicle_id": v["id"], "service_type": service_type,
         "priority": "urgent", "description": "Brakes grinding on the drive axle",
     })
     assert r.status_code == 201
     return owner, h, v, r.json()
+
+
+def drive_to_closed(client, h, wo, amount=80000):
+    """Run a work order from open to closed (invoice uploaded)."""
+    wid = wo["id"]
+    client.post(f"{BASE}/{wid}/send", headers=h, json={"call_type": "roadside"})
+    qid = client.post(f"{BASE}/{wid}/quotes", headers=h,
+                      json={"shop_name": "Santos Truck Repair", "price_cents": amount}
+                      ).json()["quotes"][0]["id"]
+    client.post(f"{BASE}/{wid}/quotes/{qid}/accept", headers=h)
+    client.post(f"{BASE}/{wid}/approve", headers=h)
+    client.post(f"{BASE}/{wid}/confirm", headers=h)
+    client.post(f"{BASE}/{wid}/ready", headers=h)
+    client.post(f"{BASE}/{wid}/attachments", headers=h, params={"kind": "invoice"},
+                files={"file": ("invoice.pdf", PDF, "application/pdf")})
+    r = client.post(f"{BASE}/{wid}/close", headers=h,
+                    json={"final_amount_cents": amount, "discount_cents": 0,
+                          "payment_method": "efs", "notes": "done"})
+    assert r.status_code == 200
+    return r.json()
 
 
 class TestWorkOrderFlow:
@@ -91,6 +111,15 @@ class TestWorkOrderFlow:
         # Attachment downloads back with auth
         r = client.get(f"{BASE}/{wo['id']}/attachments/{att_id}", headers=h)
         assert r.status_code == 200 and r.content == PDF
+
+    def test_closed_cost_keeps_chosen_service_type(self, client, db):
+        # A non-repair work order must not be logged as "Repair" on the ledger.
+        _, h, _, wo = make_wo(client, db, "wo-type@example.com", service_type="roadside")
+        drive_to_closed(client, h, wo)
+        recs = client.get("/api/fleet/service-records", headers=h).json()
+        rec = next(r for r in recs if "WO-" in (r["description"] or ""))
+        assert rec["service_type"] == "roadside"
+        assert rec["type_label"] == "Roadside service"
 
     def test_transitions_enforced(self, client, db):
         _, h, _, wo = make_wo(client, db, "wo-trans@example.com")

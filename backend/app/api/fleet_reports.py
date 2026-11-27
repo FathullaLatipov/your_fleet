@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.api.fleet import fleet_user
 from app.api.fleet_finance import _my_loans, monthly_costs
-from app.api.fleet_ops import _collect_service_records, my_deadlines
+from app.api.fleet_ops import SERVICE_TYPE_LABELS, _collect_service_records, my_deadlines
 from app.db import get_db
 from app.models import (
     FleetDriver,
@@ -29,12 +29,6 @@ from app.services.report_export import report_to_pdf, report_to_xlsx
 router = APIRouter(prefix="/api/fleet/reports", tags=["fleet"])
 
 PERIODS = {"ytd": "This year", "90": "Last 90 days", "30": "Last 30 days", "all": "All time"}
-
-SERVICE_TYPE_LABELS = {
-    "repair": "Repair", "pm": "PM", "inspection": "Inspection",
-    "roadside": "Roadside service", "towing": "Towing", "parking": "Parking",
-    "truck_wash": "Truck wash", "order_parts": "Order parts",
-}
 
 CATALOG = [
     {"key": "loan", "name": "Loan schedule",
@@ -143,7 +137,7 @@ def build_maint(db: Session, user: User, one: Vehicle | None, period: str) -> di
     rows = [[
         (r["date"] or "")[:10],
         f"#{r['unit_number']}" if r.get("unit_number") else "",
-        "Marketplace" if r["kind"] == "marketplace" else (r.get("category") or "logged").replace("_", " "),
+        r.get("type_label") or "Logged",
         r.get("description") or "",
         r.get("shop_name") or ("Logged manually" if r["kind"] == "logged" else ""),
         round(r["odometer_miles"]) if r.get("odometer_miles") is not None else "",
