@@ -311,9 +311,9 @@ function TelegramPtiSection() {
     <section className="card mt-4 p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h3 className="text-lg font-bold">Driver PTI — Telegram</h3>
+          <h3 className="text-lg font-bold">Inspections — Telegram</h3>
           <p className="mt-0.5 text-sm text-steel">
-            Drivers run their pre-trip inspection in Telegram. Failed items show up as PTI defects on the truck.
+            Drivers run pre-trip and post-trip inspections in Telegram. Failed items show up as defects on the truck.
           </p>
         </div>
         <Link href="/pti" className="shrink-0 text-sm font-semibold text-pine hover:underline">Inspections →</Link>

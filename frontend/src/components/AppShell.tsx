@@ -312,7 +312,7 @@ export function AppShell({ title, children }: { title: string; children: React.R
         { href: "/fleet", label: "Trucks", icon: "truck" },
         { href: "/trailers", label: "Trailers", icon: "trailer" },
         { href: "/drivers", label: "Drivers", icon: "users" },
-        { href: "/pti", label: "Driver PTI", icon: "clipboard" },
+        { href: "/pti", label: "Inspections", icon: "clipboard" },
         {
           href: "/work-orders", label: "Work orders", icon: "clipboard",
           children: [

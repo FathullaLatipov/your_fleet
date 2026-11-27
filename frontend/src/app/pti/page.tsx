@@ -95,6 +95,7 @@ function PtiInner() {
   const { user } = useAuth();
   const [list, setList] = useState<Pti[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [filter, setFilter] = useState<"all" | "pre" | "post">("all");
 
   const load = useCallback(() => {
     api<Pti[]>("/api/fleet/pti").then((d) => { setList(d); setError(null); })
@@ -102,16 +103,27 @@ function PtiInner() {
   }, []);
   useEffect(() => { if (user) load(); }, [user, load]);
 
+  const shown = (list ?? []).filter((p) => filter === "all" || p.inspection_type === filter);
+
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h2 className="display text-2xl font-bold">Pre-trip inspections</h2>
-          <p className="mt-1 text-sm text-steel">
-            Submitted by drivers via Telegram. Set it up in{" "}
-            <Link href="/profile" className="font-semibold text-pine hover:underline">Profile → Driver PTI</Link>.
-          </p>
-        </div>
+      <div>
+        <h2 className="display text-2xl font-bold">Inspections</h2>
+        <p className="mt-1 text-sm text-steel">
+          Pre-trip and post-trip inspections submitted by drivers via Telegram. Set it up in{" "}
+          <Link href="/profile" className="font-semibold text-pine hover:underline">Profile → Inspections</Link>.
+        </p>
+      </div>
+
+      {/* Type filter */}
+      <div className="mt-4 flex gap-1">
+        {([["all", "All"], ["pre", "Pre-trip"], ["post", "Post-trip"]] as const).map(([k, label]) => (
+          <button key={k} onClick={() => setFilter(k)}
+                  className={`rounded-full px-3.5 py-1.5 text-sm font-semibold transition-colors ${
+                    filter === k ? "bg-charcoal text-white" : "bg-mist text-steel hover:text-ink"}`}>
+            {label}
+          </button>
+        ))}
       </div>
 
       {error ? (
@@ -121,14 +133,16 @@ function PtiInner() {
         </div>
       ) : list === null ? (
         <div className="mt-6"><Loader /></div>
-      ) : list.length === 0 ? (
+      ) : shown.length === 0 ? (
         <p className="mt-6 rounded-lg border border-dashed border-line bg-mist/50 px-4 py-12 text-center text-sm text-steel">
-          No inspections yet. Invite a driver from{" "}
-          <Link href="/profile" className="font-semibold text-pine hover:underline">Profile → Driver PTI</Link>.
+          {list.length === 0 ? (
+            <>No inspections yet. Invite a driver from{" "}
+              <Link href="/profile" className="font-semibold text-pine hover:underline">Profile → Inspections</Link>.</>
+          ) : `No ${filter === "pre" ? "pre-trip" : "post-trip"} inspections yet.`}
         </p>
       ) : (
         <div className="mt-5 space-y-2.5">
-          {list.map((p) => <PtiCard key={p.id} p={p} />)}
+          {shown.map((p) => <PtiCard key={p.id} p={p} />)}
         </div>
       )}
     </div>
@@ -137,7 +151,7 @@ function PtiInner() {
 
 export default function PtiPage() {
   return (
-    <AppShell title="Pre-trip inspections">
+    <AppShell title="Inspections">
       <PtiInner />
     </AppShell>
   );
